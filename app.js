@@ -76,9 +76,6 @@ const RECURSOS = {
     podeEditar: true,
     podeExcluir: true,
     listavel: true,
-    aviso: "Atenção: os endpoints de paciente do backend ainda referenciam colunas antigas " +
-           "(num_convenio / alergias) que não existem no banco atual — as operações desta aba " +
-           "podem falhar até o backend ser ajustado.",
     campos: [
       ...camposPessoa,
       { nome: "num_convenio", rotulo: "Nº do convênio", tipo: "text", obrigatorio: true },
@@ -105,6 +102,23 @@ const RECURSOS = {
     colunas: ["id_pessoa", "nome", "CRM", "especialidade", "titulacao"],
   },
 
+  residentes: {
+    titulo: "Residentes",
+    caminho: "/residentes/",
+    chave: ["id_pessoa"],
+    podeEditar: true,
+    podeExcluir: true,
+    listavel: true,
+    campos: [
+      ...camposPessoa,
+      { nome: "CRM", rotulo: "CRM", tipo: "text", obrigatorio: true },
+      { nome: "data_admissao", rotulo: "Data de admissão", tipo: "date", obrigatorio: true },
+      { nome: "especialidade", rotulo: "Especialidade", tipo: "text", obrigatorio: true },
+      { nome: "ano_residencia", rotulo: "Ano de residência", tipo: "select", opcoes: ["R1", "R2", "R3"], obrigatorio: true },
+    ],
+    colunas: ["id_pessoa", "nome", "CRM", "especialidade", "ano_residencia"],
+  },
+
   atendimentos: {
     titulo: "Atendimentos",
     caminho: "/atendimentos/",
@@ -118,8 +132,9 @@ const RECURSOS = {
       { nome: "id_paciente", rotulo: "Paciente", tipo: "lookup", recurso: "pacientes",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do paciente (seed: 1 a 5)" },
-      { nome: "id_residente", rotulo: "Residente (id)", tipo: "number", obrigatorio: true,
-        dica: "seed: ids 11 a 15 — backend ainda não lista residentes" },
+      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
+        dica: "id do residente (seed: 11 a 15)" },
       { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do preceptor (seed: 6 a 10)" },
@@ -135,8 +150,7 @@ const RECURSOS = {
     podeExcluir: true,
     listavel: true,
     campos: [
-      { nome: "codigo", rotulo: "Código (número)", tipo: "number", obrigatorio: true, comoTexto: true,
-        dica: "no banco o código é numérico" },
+      { nome: "codigo", rotulo: "Código (número)", tipo: "number", obrigatorio: true },
       { nome: "nome", rotulo: "Nome", tipo: "text", obrigatorio: true },
       { nome: "tempo_medio_minutos", rotulo: "Tempo médio (min)", tipo: "number", obrigatorio: true, min: 1 },
       { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select", opcoes: ["BAIXO", "MEDIO", "ALTO"], obrigatorio: true },
@@ -161,8 +175,9 @@ const RECURSOS = {
         rotuloOpcao: u => `${u.id_unidade} — ${u.nome}`, valorOpcao: u => u.id_unidade },
       { nome: "dia_semana", rotulo: "Dia da semana", tipo: "select", opcoes: DIAS, obrigatorio: true },
       { nome: "turno", rotulo: "Turno", tipo: "select", opcoes: TURNOS, obrigatorio: true },
-      { nome: "id_residente", rotulo: "Residente (id)", tipo: "number", obrigatorio: true,
-        dica: "seed: ids 11 a 15" },
+      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
+        dica: "id do residente (seed: 11 a 15)" },
       { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
     ],

@@ -38,9 +38,11 @@ e não há problema de CORS, sem precisar alterar nada no backend.
 
 ## Funcionalidades
 
-- **Pacientes** — cadastrar, listar, editar, excluir
+- **Pacientes** — cadastrar, listar, editar, excluir (alergias separadas por
+  vírgula viram linhas na tabela `Alergia` do banco)
 - **Preceptores** — cadastrar e listar (o backend ainda não expõe editar/excluir)
-- **Atendimentos** — CRUD completo, com seleção de paciente/preceptor por nome
+- **Residentes** — CRUD completo, com ano de residência restrito a R1/R2/R3
+- **Atendimentos** — CRUD completo, com seleção de paciente/residente/preceptor por nome
 - **Procedimentos** — CRUD completo
 - **Procedimentos realizados** — registrar, buscar, atualizar e excluir pela
   chave composta (atendimento + procedimento)
