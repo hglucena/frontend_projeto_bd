@@ -5,7 +5,7 @@ do repositório [backend_projeto_bd](https://github.com/brunocostaar/backend_pro
 
 Sem frameworks e sem `npm install`: HTML, CSS e JavaScript puros, servidos por
 um pequeno servidor Python (biblioteca padrão) que também faz proxy das
-chamadas `/api/*` para o backend — assim o navegador enxerga uma única origem
+chamadas `/api/*` para o backend. Assim o navegador enxerga uma única origem
 e não há problema de CORS, sem precisar alterar nada no backend.
 
 ## Como rodar (3 passos)
@@ -38,17 +38,19 @@ e não há problema de CORS, sem precisar alterar nada no backend.
 
 ## Funcionalidades
 
-- **Pacientes** — cadastrar, listar, editar, excluir (alergias separadas por
-  vírgula viram linhas na tabela `Alergia` do banco)
-- **Preceptores** — cadastrar e listar (o backend ainda não expõe editar/excluir)
-- **Residentes** — CRUD completo, com ano de residência restrito a R1/R2/R3
-- **Atendimentos** — CRUD completo, com seleção de paciente/residente/preceptor por nome
-- **Procedimentos** — CRUD completo
-- **Procedimentos realizados** — registrar, buscar, atualizar e excluir pela
-  chave composta (atendimento + procedimento)
-- **Escalas** — CRUD completo, com dia da semana e turno restritos aos valores
-  aceitos pelo banco (`segunda..domingo`, `manha/tarde/noite`)
-- **Unidades** — CRUD completo
+- Pacientes: cadastrar, listar, editar e excluir. As alergias separadas por
+  vírgula viram linhas na tabela `alergia` do banco.
+- Preceptores: cadastrar e listar (o backend ainda não expõe editar/excluir)
+- Residentes: CRUD completo, com ano de residência restrito a R1, R2 e R3
+- Atendimentos: CRUD completo, com seleção de paciente, residente e
+  preceptor por nome
+- Procedimentos: CRUD completo
+- Procedimentos realizados: registrar, buscar, atualizar e excluir pela
+  chave composta (atendimento e procedimento)
+- Escalas: CRUD completo, com dia da semana e turno restritos aos valores
+  aceitos pelo banco
+- Unidades: CRUD completo
 
-Erros da API (validações, conflitos de escala, restrições do banco) aparecem
-como notificação no canto da tela, com a mensagem original do backend.
+Os erros da API (validações, conflitos de escala, restrições do banco)
+aparecem como notificação no canto da tela, com a mensagem original do
+backend.
