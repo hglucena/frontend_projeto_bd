@@ -27,6 +27,12 @@ PORTA = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
 
 class Handler(http.server.SimpleHTTPRequestHandler):
 
+    def end_headers(self):
+        # Obriga o navegador a revalidar os arquivos a cada carregamento,
+        # evitando que uma versão antiga do app.js fique presa no cache
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def _proxy(self):
         destino = BACKEND + self.path[len("/api"):]
         corpo = None
