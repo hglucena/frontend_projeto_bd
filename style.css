@@ -159,6 +159,34 @@ td button.excluir { background: var(--vermelho); }
 
 .vazio { color: #888; font-style: italic; padding: 12px 0; }
 
+/* --- consulta e perfil --- */
+
+.ajuda { font-size: 0.82rem; color: #777; margin-bottom: 12px; }
+
+tr.clicavel { cursor: pointer; }
+tr.clicavel:hover td { background: #dcebfa; }
+
+button.voltar { margin-bottom: 16px; }
+
+dl.perfil {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px 24px;
+  margin-bottom: 18px;
+}
+
+dl.perfil dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #667;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+dl.perfil dd { font-size: 0.98rem; margin-top: 3px; }
+
+button.excluir-perfil { background: var(--vermelho); }
+
 #toast {
   position: fixed;
   bottom: 24px;

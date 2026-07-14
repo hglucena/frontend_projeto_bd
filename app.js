@@ -7,6 +7,8 @@ const API = "/api";
 
 /* ---------- utilitários ---------- */
 
+let cacheListas = {}; // cache das listagens (lookups e decoração de tabelas)
+
 async function chamarApi(metodo, caminho, corpo) {
   const opcoes = { method: metodo, headers: {} };
   if (corpo !== undefined) {
@@ -19,6 +21,7 @@ async function chamarApi(metodo, caminho, corpo) {
   } catch (e) {
     throw new Error("Não foi possível falar com a API. O backend está rodando na porta 8000?");
   }
+  if (metodo !== "GET") cacheListas = {}; // dados mudaram: invalida o cache
   if (resposta.status === 204) return null;
   let dados = null;
   try { dados = await resposta.json(); } catch (e) { /* corpo vazio */ }
@@ -29,6 +32,40 @@ async function chamarApi(metodo, caminho, corpo) {
     throw new Error(detalhe);
   }
   return dados;
+}
+
+function listaCacheada(chaveRecurso) {
+  if (!cacheListas[chaveRecurso]) {
+    cacheListas[chaveRecurso] = chamarApi("GET", RECURSOS[chaveRecurso].caminho)
+      .catch(e => { delete cacheListas[chaveRecurso]; throw e; });
+  }
+  return cacheListas[chaveRecurso];
+}
+
+async function mapaPorId(chaveRecurso, campoId) {
+  const mapa = {};
+  for (const item of await listaCacheada(chaveRecurso)) mapa[item[campoId]] = item;
+  return mapa;
+}
+
+function rotularPessoa(mapa, id) {
+  return mapa[id] ? `${mapa[id].nome} (id ${id})` : `id ${id}`;
+}
+
+function montarQuery(filtros) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filtros || {})) {
+    if (v !== null && v !== undefined && v !== "") params.set(k, v);
+  }
+  const s = params.toString();
+  return s ? "?" + s : "";
+}
+
+function formatarValor(coluna, valor) {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  if (typeof valor === "boolean") return valor ? "sim" : "não";
+  if (coluna === "data_hora") return String(valor).slice(0, 16).replace("T", " ");
+  return String(valor);
 }
 
 function toast(mensagem, tipo) {
@@ -68,6 +105,11 @@ const camposPessoa = [
   { nome: "is_flamengo", rotulo: "É flamenguista?", tipo: "checkbox" },
 ];
 
+const buscaPessoa = [
+  { nome: "nome", rotulo: "Nome contém", tipo: "text" },
+  { nome: "cpf", rotulo: "CPF contém", tipo: "text" },
+];
+
 const RECURSOS = {
   pacientes: {
     titulo: "Pacientes",
@@ -75,7 +117,6 @@ const RECURSOS = {
     chave: ["id_pessoa"],
     podeEditar: true,
     podeExcluir: true,
-    listavel: true,
     campos: [
       ...camposPessoa,
       { nome: "num_convenio", rotulo: "Nº do convênio", tipo: "text", obrigatorio: true },
@@ -83,6 +124,16 @@ const RECURSOS = {
       { nome: "grupo_sanguineo", rotulo: "Grupo sanguíneo", tipo: "select", opcoes: GRUPOS_SANGUINEOS },
     ],
     colunas: ["id_pessoa", "nome", "CPF", "num_convenio", "grupo_sanguineo", "telefone"],
+    busca: [
+      ...buscaPessoa,
+      { nome: "grupo_sanguineo", rotulo: "Grupo sanguíneo", tipo: "select", opcoes: GRUPOS_SANGUINEOS },
+    ],
+    perfil: {
+      rotuloItem: p => `🧑 Paciente — ${p.nome}`,
+      relacionados: [
+        { titulo: "Atendimentos deste paciente", recurso: "atendimentos", parametro: "id_paciente" },
+      ],
+    },
   },
 
   preceptores: {
@@ -91,7 +142,6 @@ const RECURSOS = {
     chave: ["id_pessoa"],
     podeEditar: false,   // o backend só oferece criar e listar
     podeExcluir: false,
-    listavel: true,
     campos: [
       ...camposPessoa,
       { nome: "CRM", rotulo: "CRM", tipo: "text", obrigatorio: true },
@@ -100,6 +150,17 @@ const RECURSOS = {
       { nome: "titulacao", rotulo: "Titulação", tipo: "text", obrigatorio: true },
     ],
     colunas: ["id_pessoa", "nome", "CRM", "especialidade", "titulacao"],
+    busca: [
+      ...buscaPessoa,
+      { nome: "especialidade", rotulo: "Especialidade contém", tipo: "text" },
+    ],
+    perfil: {
+      rotuloItem: p => `🩺 Preceptor — ${p.nome}`,
+      relacionados: [
+        { titulo: "Atendimentos supervisionados por este preceptor", recurso: "atendimentos", parametro: "id_preceptor" },
+        { titulo: "Escalas deste preceptor", recurso: "escalas", parametro: "id_preceptor" },
+      ],
+    },
   },
 
   residentes: {
@@ -108,7 +169,6 @@ const RECURSOS = {
     chave: ["id_pessoa"],
     podeEditar: true,
     podeExcluir: true,
-    listavel: true,
     campos: [
       ...camposPessoa,
       { nome: "CRM", rotulo: "CRM", tipo: "text", obrigatorio: true },
@@ -117,6 +177,18 @@ const RECURSOS = {
       { nome: "ano_residencia", rotulo: "Ano de residência", tipo: "select", opcoes: ["R1", "R2", "R3"], obrigatorio: true },
     ],
     colunas: ["id_pessoa", "nome", "CRM", "especialidade", "ano_residencia"],
+    busca: [
+      ...buscaPessoa,
+      { nome: "especialidade", rotulo: "Especialidade contém", tipo: "text" },
+      { nome: "ano_residencia", rotulo: "Ano de residência", tipo: "select", opcoes: ["R1", "R2", "R3"] },
+    ],
+    perfil: {
+      rotuloItem: p => `🎓 Residente — ${p.nome}`,
+      relacionados: [
+        { titulo: "Atendimentos deste residente", recurso: "atendimentos", parametro: "id_residente" },
+        { titulo: "Escalas deste residente", recurso: "escalas", parametro: "id_residente" },
+      ],
+    },
   },
 
   atendimentos: {
@@ -125,21 +197,48 @@ const RECURSOS = {
     chave: ["id_atendimento"],
     podeEditar: true,
     podeExcluir: true,
-    listavel: true,
     campos: [
       { nome: "data_hora", rotulo: "Data e hora", tipo: "datetime-local", obrigatorio: true },
       { nome: "duracao_minutos", rotulo: "Duração (min)", tipo: "number", obrigatorio: true, min: 1 },
-      { nome: "id_paciente", rotulo: "Paciente", tipo: "lookup", recurso: "pacientes",
+      { nome: "id_paciente", rotulo: "Paciente", tipo: "lookup", recurso: "pacientes", decorado: "paciente",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do paciente (seed: 1 a 5)" },
-      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes",
+      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes", decorado: "residente",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do residente (seed: 11 a 15)" },
-      { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores",
+      { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores", decorado: "preceptor",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do preceptor (seed: 6 a 10)" },
     ],
-    colunas: ["id_atendimento", "data_hora", "duracao_minutos", "id_paciente", "id_residente", "id_preceptor"],
+    colunas: ["id_atendimento", "data_hora", "duracao_minutos", "paciente", "residente", "preceptor"],
+    decorar: async (itens) => {
+      const [pac, res, pre] = await Promise.all([
+        mapaPorId("pacientes", "id_pessoa"),
+        mapaPorId("residentes", "id_pessoa"),
+        mapaPorId("preceptores", "id_pessoa"),
+      ]);
+      return itens.map(a => ({
+        ...a,
+        paciente: rotularPessoa(pac, a.id_paciente),
+        residente: rotularPessoa(res, a.id_residente),
+        preceptor: rotularPessoa(pre, a.id_preceptor),
+      }));
+    },
+    busca: [
+      { nome: "id_paciente", rotulo: "Paciente", tipo: "lookup", recurso: "pacientes",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
+      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
+      { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
+      { nome: "data", rotulo: "Data (dia exato)", tipo: "date" },
+    ],
+    perfil: {
+      rotuloItem: a => `📋 Atendimento nº ${a.id_atendimento}`,
+      relacionados: [
+        { titulo: "Procedimentos realizados neste atendimento", recurso: "procedimentos-realizados", parametro: "id_atendimento" },
+      ],
+    },
   },
 
   procedimentos: {
@@ -148,7 +247,6 @@ const RECURSOS = {
     chave: ["id_procedimento"],
     podeEditar: true,
     podeExcluir: true,
-    listavel: true,
     campos: [
       { nome: "codigo", rotulo: "Código (número)", tipo: "number", obrigatorio: true },
       { nome: "nome", rotulo: "Nome", tipo: "text", obrigatorio: true },
@@ -156,11 +254,47 @@ const RECURSOS = {
       { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select", opcoes: ["BAIXO", "MEDIO", "ALTO"], obrigatorio: true },
     ],
     colunas: ["id_procedimento", "codigo", "nome", "tempo_medio_minutos", "nivel_risco"],
+    busca: [
+      { nome: "nome", rotulo: "Nome contém", tipo: "text" },
+      { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select", opcoes: ["BAIXO", "MEDIO", "ALTO"] },
+      { nome: "codigo", rotulo: "Código", tipo: "number" },
+    ],
+    perfil: {
+      rotuloItem: p => `💉 Procedimento — ${p.nome}`,
+      relacionados: [
+        { titulo: "Atendimentos em que este procedimento foi realizado", recurso: "procedimentos-realizados", parametro: "id_procedimento" },
+      ],
+    },
   },
 
   "procedimentos-realizados": {
     titulo: "Proc. Realizados",
     especial: "procRealizado",
+    caminho: "/procedimentos-realizados/",
+    chave: ["id_atendimento", "id_procedimento"],
+    colunas: ["atendimento", "procedimento", "quantidade", "tempo_real_minutos", "observacao", "faturado"],
+    decorar: async (itens) => {
+      const ate = await mapaPorId("atendimentos", "id_atendimento");
+      return itens.map(pr => ({
+        ...pr,
+        atendimento: ate[pr.id_atendimento]
+          ? `nº ${pr.id_atendimento} — ${formatarValor("data_hora", ate[pr.id_atendimento].data_hora)}`
+          : `nº ${pr.id_atendimento}`,
+        // o nome do procedimento vem do JOIN feito em SQL no backend
+        procedimento: pr.nome_procedimento
+          ? `${pr.nome_procedimento} (id ${pr.id_procedimento})`
+          : `id ${pr.id_procedimento}`,
+      }));
+    },
+    busca: [
+      { nome: "id_atendimento", rotulo: "Atendimento", tipo: "lookup", recurso: "atendimentos",
+        rotuloOpcao: a => `${a.id_atendimento} — ${String(a.data_hora).slice(0, 16).replace("T", " ")}`,
+        valorOpcao: a => a.id_atendimento },
+      { nome: "id_procedimento", rotulo: "Procedimento", tipo: "lookup", recurso: "procedimentos",
+        rotuloOpcao: p => `${p.id_procedimento} — ${p.nome}`, valorOpcao: p => p.id_procedimento },
+      { nome: "faturado", rotulo: "Faturado", tipo: "select",
+        opcoes: [{ valor: "true", rotulo: "sim" }, { valor: "false", rotulo: "não" }] },
+    ],
   },
 
   escalas: {
@@ -169,19 +303,50 @@ const RECURSOS = {
     chave: ["id_escala"],
     podeEditar: true,
     podeExcluir: true,
-    listavel: true,
     campos: [
-      { nome: "id_unidade", rotulo: "Unidade", tipo: "lookup", recurso: "unidades",
+      { nome: "id_unidade", rotulo: "Unidade", tipo: "lookup", recurso: "unidades", decorado: "unidade",
         rotuloOpcao: u => `${u.id_unidade} — ${u.nome}`, valorOpcao: u => u.id_unidade },
       { nome: "dia_semana", rotulo: "Dia da semana", tipo: "select", opcoes: DIAS, obrigatorio: true },
       { nome: "turno", rotulo: "Turno", tipo: "select", opcoes: TURNOS, obrigatorio: true },
-      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes",
+      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes", decorado: "residente",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do residente (seed: 11 a 15)" },
-      { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores",
+      { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores", decorado: "preceptor",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
     ],
-    colunas: ["id_escala", "id_unidade", "dia_semana", "turno", "id_residente", "id_preceptor"],
+    colunas: ["id_escala", "unidade", "dia_semana", "turno", "residente", "preceptor"],
+    decorar: async (itens) => {
+      const [uni, res, pre] = await Promise.all([
+        mapaPorId("unidades", "id_unidade"),
+        mapaPorId("residentes", "id_pessoa"),
+        mapaPorId("preceptores", "id_pessoa"),
+      ]);
+      return itens.map(e => ({
+        ...e,
+        unidade: uni[e.id_unidade] ? `${uni[e.id_unidade].nome} (id ${e.id_unidade})` : `id ${e.id_unidade}`,
+        residente: rotularPessoa(res, e.id_residente),
+        preceptor: rotularPessoa(pre, e.id_preceptor),
+      }));
+    },
+    busca: [
+      { nome: "id_unidade", rotulo: "Unidade", tipo: "lookup", recurso: "unidades",
+        rotuloOpcao: u => `${u.id_unidade} — ${u.nome}`, valorOpcao: u => u.id_unidade },
+      { nome: "id_residente", rotulo: "Residente", tipo: "lookup", recurso: "residentes",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
+      { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores",
+        rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
+      { nome: "dia_semana", rotulo: "Dia da semana", tipo: "select", opcoes: DIAS },
+      { nome: "turno", rotulo: "Turno", tipo: "select", opcoes: TURNOS },
+    ],
+    perfil: {
+      rotuloItem: e => `🗓️ Escala nº ${e.id_escala}`,
+      relacionados: [],
+    },
+  },
+
+  relatorios: {
+    titulo: "📊 Relatórios",
+    especial: "relatorios",
   },
 
   unidades: {
@@ -190,13 +355,22 @@ const RECURSOS = {
     chave: ["id_unidade"],
     podeEditar: true,
     podeExcluir: true,
-    listavel: true,
     campos: [
       { nome: "nome", rotulo: "Nome", tipo: "text", obrigatorio: true },
       { nome: "tipo", rotulo: "Tipo", tipo: "text", obrigatorio: true, dica: "Enfermaria, UTI, Pronto-Socorro..." },
       { nome: "capacidade_leitos", rotulo: "Capacidade de leitos", tipo: "number", obrigatorio: true, min: 0 },
     ],
     colunas: ["id_unidade", "nome", "tipo", "capacidade_leitos"],
+    busca: [
+      { nome: "nome", rotulo: "Nome contém", tipo: "text" },
+      { nome: "tipo", rotulo: "Tipo contém", tipo: "text" },
+    ],
+    perfil: {
+      rotuloItem: u => `🏥 Unidade — ${u.nome}`,
+      relacionados: [
+        { titulo: "Escalas desta unidade", recurso: "escalas", parametro: "id_unidade" },
+      ],
+    },
   },
 };
 
@@ -212,7 +386,11 @@ function criarCampo(campo) {
   if (campo.tipo === "select") {
     controle = el("select", { name: campo.nome });
     if (!campo.obrigatorio) controle.append(el("option", { value: "" }, "—"));
-    for (const o of campo.opcoes) controle.append(el("option", { value: o }, o));
+    for (const o of campo.opcoes) {
+      const valor = typeof o === "object" ? o.valor : o;
+      const rotulo = typeof o === "object" ? o.rotulo : o;
+      controle.append(el("option", { value: valor }, rotulo));
+    }
   } else if (campo.tipo === "lookup") {
     // tenta carregar as opções da API; se falhar, vira campo numérico simples
     controle = el("select", { name: campo.nome });
@@ -235,11 +413,16 @@ function criarCampo(campo) {
 
 async function carregarLookup(select, campo) {
   try {
-    const itens = await chamarApi("GET", RECURSOS[campo.recurso].caminho);
+    const itens = await listaCacheada(campo.recurso);
     select.innerHTML = "";
     select.append(el("option", { value: "" }, "selecione..."));
     for (const item of itens) {
       select.append(el("option", { value: campo.valorOpcao(item) }, campo.rotuloOpcao(item)));
+    }
+    select.dataset.carregado = "1";
+    if (select.dataset.pendente !== undefined) {
+      select.value = select.dataset.pendente;
+      delete select.dataset.pendente;
     }
   } catch (e) {
     // fallback: troca o select por input numérico para não travar o formulário
@@ -275,20 +458,130 @@ function preencherFormulario(form, campos, item) {
     const valor = item[campo.nome];
     if (campo.tipo === "checkbox") controle.checked = Boolean(valor);
     else if (campo.tipo === "datetime-local" && valor) controle.value = String(valor).slice(0, 16);
-    else controle.value = valor === null || valor === undefined ? "" : valor;
+    else {
+      const texto = valor === null || valor === undefined ? "" : String(valor);
+      controle.value = texto;
+      // lookup ainda carregando: guarda o valor para aplicar quando as opções chegarem
+      if (campo.tipo === "lookup" && controle.tagName === "SELECT" && controle.dataset.carregado !== "1") {
+        controle.dataset.pendente = texto;
+      }
+    }
   }
 }
 
-/* ---------- aba CRUD genérica ---------- */
+/* ---------- tabela de resultados genérica ---------- */
 
-function montarAbaCrud(chaveRecurso) {
+async function renderizarTabela(chaveRecurso, itens, opcoes = {}) {
+  const cfg = RECURSOS[chaveRecurso];
+  if (cfg.decorar && itens && itens.length > 0) {
+    try { itens = await cfg.decorar(itens); } catch (e) { /* exibe sem decoração */ }
+  }
+  const wrap = el("div", { class: "tabela-wrap" });
+  if (!itens || itens.length === 0) {
+    wrap.append(el("p", { class: "vazio" }, "Nenhum registro encontrado."));
+    return wrap;
+  }
+
+  const tabela = el("table");
+  const cab = el("tr");
+  for (const c of cfg.colunas) cab.append(el("th", {}, c.replaceAll("_", " ")));
+  if (opcoes.acoes) cab.append(el("th", {}, "ações"));
+  tabela.append(cab);
+
+  const aoClicar = opcoes.aoClicar || (cfg.perfil ? (item) => abrirPerfil(chaveRecurso, item) : null);
+
+  for (const item of itens) {
+    const linha = el("tr");
+    for (const c of cfg.colunas) linha.append(el("td", {}, formatarValor(c, item[c])));
+    if (opcoes.acoes) {
+      const celula = el("td");
+      for (const botao of opcoes.acoes(item)) celula.append(botao);
+      linha.append(celula);
+    }
+    if (aoClicar) {
+      linha.classList.add("clicavel");
+      linha.title = "Clique para abrir o perfil";
+      linha.addEventListener("click", () => aoClicar(item));
+    }
+    tabela.append(linha);
+  }
+  wrap.append(tabela);
+  return wrap;
+}
+
+/* ---------- navegação (abas + perfis, com botão voltar) ---------- */
+
+let abaAtiva = null;
+let visaoAtual = null;   // { tipo: "aba", chave } | { tipo: "perfil", chave, item }
+let pilhaVoltar = [];
+const estadoBusca = {};  // últimos filtros usados em cada aba
+
+function abrirPerfil(chaveRecurso, item) {
+  pilhaVoltar.push(visaoAtual);
+  visaoAtual = { tipo: "perfil", chave: chaveRecurso, item };
+  montarPerfil(chaveRecurso, item);
+}
+
+function voltar() {
+  const anterior = pilhaVoltar.pop() || { tipo: "aba", chave: abaAtiva };
+  visaoAtual = anterior;
+  if (anterior.tipo === "perfil") montarPerfil(anterior.chave, anterior.item);
+  else montarVisaoAba(anterior.chave);
+}
+
+function montarVisaoAba(chaveRecurso, opcoes) {
+  if (RECURSOS[chaveRecurso].especial === "procRealizado") montarAbaProcRealizado();
+  else if (RECURSOS[chaveRecurso].especial === "relatorios") montarAbaRelatorios();
+  else montarAbaCrud(chaveRecurso, opcoes);
+}
+
+function ativarAba(chaveRecurso, opcoes) {
+  document.querySelectorAll("#tabs button").forEach(b =>
+    b.classList.toggle("ativa", b.dataset.recurso === chaveRecurso));
+  abaAtiva = chaveRecurso;
+  pilhaVoltar = [];
+  visaoAtual = { tipo: "aba", chave: chaveRecurso };
+  montarVisaoAba(chaveRecurso, opcoes);
+}
+
+/* ---------- aba CRUD genérica (consulta + resultados + cadastro) ---------- */
+
+function montarAbaCrud(chaveRecurso, opcoes = {}) {
   const cfg = RECURSOS[chaveRecurso];
   const raiz = document.getElementById("content");
   raiz.innerHTML = "";
 
   if (cfg.aviso) raiz.append(el("div", { class: "aviso" }, "⚠️ " + cfg.aviso));
 
-  // --- formulário ---
+  /* --- consulta --- */
+  const camposBusca = cfg.busca || [];
+  const formBusca = el("form", { class: "crud-form" });
+  for (const campo of camposBusca) formBusca.append(criarCampo(campo));
+  const botaoBuscar = el("button", { class: "botao", type: "submit" }, "🔍 Buscar");
+  const botaoLimpar = el("button", { class: "botao neutro", type: "button", onclick: () => {
+    formBusca.reset();
+    formBusca.querySelectorAll("select").forEach(s => { s.value = ""; });
+    delete estadoBusca[chaveRecurso];
+    atualizarTabela();
+  } }, "Limpar filtros");
+  formBusca.append(el("div", { class: "acoes-form" }, botaoBuscar, botaoLimpar));
+  formBusca.addEventListener("submit", (ev) => { ev.preventDefault(); atualizarTabela(); });
+
+  raiz.append(el("div", { class: "card" },
+    el("h2", {}, "🔎 Consultar " + cfg.titulo.toLowerCase()),
+    el("p", { class: "ajuda" },
+      "Preencha um ou mais filtros e clique em Buscar. Clique em um resultado para abrir o perfil completo."),
+    formBusca));
+
+  // restaura a última busca desta aba (ex.: ao voltar de um perfil)
+  if (estadoBusca[chaveRecurso]) preencherFormulario(formBusca, camposBusca, estadoBusca[chaveRecurso]);
+
+  /* --- resultados --- */
+  const tituloResultados = el("h2", {}, "Resultados");
+  const areaTabela = el("div");
+  raiz.append(el("div", { class: "card" }, tituloResultados, areaTabela));
+
+  /* --- formulário de cadastro/edição --- */
   const form = el("form", { class: "crud-form" });
   for (const campo of cfg.campos) form.append(criarCampo(campo));
 
@@ -298,11 +591,24 @@ function montarAbaCrud(chaveRecurso) {
   botaoCancelar.style.display = "none";
   form.append(el("div", { class: "acoes-form" }, botaoSalvar, botaoCancelar));
 
+  const cardCadastro = el("div", { class: "card" },
+    el("h2", {}, "➕ " + (cfg.podeEditar ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()),
+    form);
+  raiz.append(cardCadastro);
+
   function cancelarEdicao() {
     idEmEdicao.valor = null;
     form.reset();
     botaoSalvar.textContent = "Cadastrar";
     botaoCancelar.style.display = "none";
+  }
+
+  function iniciarEdicao(item) {
+    idEmEdicao.valor = item[cfg.chave[0]];
+    preencherFormulario(form, cfg.campos, item);
+    botaoSalvar.textContent = "Salvar alterações";
+    botaoCancelar.style.display = "";
+    cardCadastro.scrollIntoView({ behavior: "smooth" });
   }
 
   form.addEventListener("submit", async (ev) => {
@@ -323,82 +629,186 @@ function montarAbaCrud(chaveRecurso) {
     }
   });
 
-  raiz.append(el("div", { class: "card" },
-    el("h2", {}, (cfg.podeEditar ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()),
-    form));
-
-  // --- tabela ---
-  const areaTabela = el("div", { class: "tabela-wrap" });
-  raiz.append(el("div", { class: "card" }, el("h2", {}, "Lista de " + cfg.titulo.toLowerCase()), areaTabela));
+  function montarAcoes(item) {
+    const botoes = [];
+    const id = item[cfg.chave[0]];
+    if (cfg.podeEditar) {
+      botoes.push(el("button", { class: "editar", onclick: (ev) => {
+        ev.stopPropagation();
+        iniciarEdicao(item);
+      } }, "Editar"));
+    }
+    if (cfg.podeExcluir) {
+      botoes.push(el("button", { class: "excluir", onclick: async (ev) => {
+        ev.stopPropagation();
+        if (!confirm(`Excluir registro ${id}?`)) return;
+        try {
+          await chamarApi("DELETE", cfg.caminho + id);
+          toast("Registro excluído.", "ok");
+          await atualizarTabela();
+        } catch (e) { toast(e.message, "erro"); }
+      } }, "Excluir"));
+    }
+    return botoes;
+  }
 
   async function atualizarTabela() {
+    const filtros = lerFormulario(formBusca, camposBusca);
+    estadoBusca[chaveRecurso] = filtros;
     areaTabela.innerHTML = "";
+    areaTabela.append(el("p", { class: "vazio" }, "Carregando..."));
     let itens;
     try {
-      itens = await chamarApi("GET", cfg.caminho);
+      itens = await chamarApi("GET", cfg.caminho + montarQuery(filtros));
     } catch (e) {
-      areaTabela.append(el("p", { class: "vazio" }, "Erro ao listar: " + e.message));
+      areaTabela.innerHTML = "";
+      areaTabela.append(el("p", { class: "vazio" }, "Erro ao consultar: " + e.message));
       return;
     }
-    if (!itens || itens.length === 0) {
-      areaTabela.append(el("p", { class: "vazio" }, "Nenhum registro."));
-      return;
-    }
-    const tabela = el("table");
-    const cab = el("tr");
-    for (const c of cfg.colunas) cab.append(el("th", {}, c));
-    if (cfg.podeEditar || cfg.podeExcluir) cab.append(el("th", {}, "ações"));
-    tabela.append(cab);
-
-    for (const item of itens) {
-      const linha = el("tr");
-      for (const c of cfg.colunas) {
-        let valor = item[c];
-        if (valor === null || valor === undefined) valor = "—";
-        if (typeof valor === "boolean") valor = valor ? "sim" : "não";
-        linha.append(el("td", {}, String(valor)));
-      }
-      if (cfg.podeEditar || cfg.podeExcluir) {
-        const celula = el("td");
-        const id = item[cfg.chave[0]];
-        if (cfg.podeEditar) {
-          celula.append(el("button", { class: "editar", onclick: () => {
-            idEmEdicao.valor = id;
-            preencherFormulario(form, cfg.campos, item);
-            botaoSalvar.textContent = "Salvar alterações";
-            botaoCancelar.style.display = "";
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          } }, "Editar"));
-        }
-        if (cfg.podeExcluir) {
-          celula.append(el("button", { class: "excluir", onclick: async () => {
-            if (!confirm(`Excluir registro ${id}?`)) return;
-            try {
-              await chamarApi("DELETE", cfg.caminho + id);
-              toast("Registro excluído.", "ok");
-              await atualizarTabela();
-            } catch (e) { toast(e.message, "erro"); }
-          } }, "Excluir"));
-        }
-        linha.append(celula);
-      }
-      tabela.append(linha);
-    }
+    const temFiltro = Object.values(filtros).some(v => v !== null && v !== undefined && v !== "");
+    tituloResultados.textContent = temFiltro
+      ? `Resultados da consulta (${itens.length})`
+      : `Todos os registros (${itens.length})`;
+    const tabela = await renderizarTabela(chaveRecurso, itens, {
+      acoes: (cfg.podeEditar || cfg.podeExcluir) ? montarAcoes : undefined,
+    });
+    areaTabela.innerHTML = "";
     areaTabela.append(tabela);
   }
 
-  atualizarTabela();
+  atualizarTabela().then(() => {
+    if (opcoes.editar) iniciarEdicao(opcoes.editar);
+  });
+}
+
+/* ---------- perfil de um registro (com dados relacionados) ---------- */
+
+async function montarPerfil(chaveRecurso, item) {
+  const cfg = RECURSOS[chaveRecurso];
+  const raiz = document.getElementById("content");
+  raiz.innerHTML = "";
+
+  raiz.append(el("button", { class: "botao neutro voltar", onclick: voltar }, "← Voltar"));
+
+  // decoração: mostra nomes no lugar de ids nos campos de referência
+  let decorado = item;
+  if (cfg.decorar) {
+    try { decorado = (await cfg.decorar([item]))[0]; } catch (e) { /* segue sem decoração */ }
+  }
+
+  const dl = el("dl", { class: "perfil" });
+  for (const campo of cfg.campos || []) {
+    let valor;
+    if (campo.tipo === "lookup" && campo.decorado && decorado[campo.decorado] !== undefined) {
+      valor = decorado[campo.decorado];
+    } else {
+      valor = formatarValor(campo.nome, item[campo.nome]);
+    }
+    dl.append(el("div", {}, el("dt", {}, campo.rotulo), el("dd", {}, String(valor))));
+  }
+
+  const acoes = el("div", { class: "acoes-form" });
+  if (cfg.podeEditar) {
+    acoes.append(el("button", { class: "botao", onclick: () => ativarAba(chaveRecurso, { editar: item }) },
+      "✏️ Editar no formulário"));
+  }
+  if (cfg.podeExcluir) {
+    acoes.append(el("button", { class: "botao excluir-perfil", onclick: async () => {
+      const id = item[cfg.chave[0]];
+      if (!confirm(`Excluir registro ${id}?`)) return;
+      try {
+        await chamarApi("DELETE", cfg.caminho + id);
+        toast("Registro excluído.", "ok");
+        ativarAba(chaveRecurso);
+      } catch (e) { toast(e.message, "erro"); }
+    } }, "🗑 Excluir"));
+  }
+
+  const identificacao = cfg.chave.map(c => `${c.replaceAll("_", " ")}: ${item[c]}`).join(" · ");
+  raiz.append(el("div", { class: "card" },
+    el("h2", {}, cfg.perfil && cfg.perfil.rotuloItem ? cfg.perfil.rotuloItem(item) : "Registro"),
+    el("p", { class: "ajuda" }, identificacao),
+    dl,
+    acoes));
+
+  // seções com os registros relacionados a este perfil
+  for (const rel of (cfg.perfil && cfg.perfil.relacionados) || []) {
+    const area = el("div");
+    area.append(el("p", { class: "vazio" }, "Carregando..."));
+    raiz.append(el("div", { class: "card" }, el("h2", {}, rel.titulo), area));
+    (async () => {
+      try {
+        const alvo = RECURSOS[rel.recurso];
+        const itens = await chamarApi("GET", `${alvo.caminho}?${rel.parametro}=${item[cfg.chave[0]]}`);
+        const tabela = await renderizarTabela(rel.recurso, itens);
+        area.innerHTML = "";
+        area.append(tabela);
+      } catch (e) {
+        area.innerHTML = "";
+        area.append(el("p", { class: "vazio" }, "Erro: " + e.message));
+      }
+    })();
+  }
+}
+
+/* ---------- aba especial: relatórios (consultas agregadas em SQL) ---------- */
+
+async function montarAbaRelatorios() {
+  const raiz = document.getElementById("content");
+  raiz.innerHTML = "";
+
+  const area = el("div", { class: "tabela-wrap" });
+  area.append(el("p", { class: "vazio" }, "Carregando..."));
+  raiz.append(el("div", { class: "card" },
+    el("h2", {}, "⏱️ Tempo médio de duração dos atendimentos por residente"),
+    el("p", { class: "ajuda" },
+      "Calculado pelo banco com AVG + GROUP BY (LEFT JOIN inclui residente sem atendimento). " +
+      "Clique em um residente para abrir o perfil."),
+    area));
+
+  try {
+    const [dados, residentes] = await Promise.all([
+      chamarApi("GET", "/atendimentos/tempo-medio-por-residente"),
+      listaCacheada("residentes"),
+    ]);
+    const porId = {};
+    for (const r of residentes) porId[r.id_pessoa] = r;
+
+    const tabela = el("table");
+    const cab = el("tr");
+    for (const c of ["id", "residente", "total de atendimentos", "tempo médio (min)"]) {
+      cab.append(el("th", {}, c));
+    }
+    tabela.append(cab);
+
+    for (const d of dados) {
+      const linha = el("tr");
+      linha.append(el("td", {}, String(d.id_residente)));
+      linha.append(el("td", {}, d.nome));
+      linha.append(el("td", {}, String(d.total_atendimentos)));
+      linha.append(el("td", {}, d.tempo_medio_minutos === null ? "—" : String(d.tempo_medio_minutos)));
+      const residente = porId[d.id_residente];
+      if (residente) {
+        linha.classList.add("clicavel");
+        linha.title = "Clique para abrir o perfil";
+        linha.addEventListener("click", () => abrirPerfil("residentes", residente));
+      }
+      tabela.append(linha);
+    }
+    area.innerHTML = "";
+    area.append(tabela);
+  } catch (e) {
+    area.innerHTML = "";
+    area.append(el("p", { class: "vazio" }, "Erro: " + e.message));
+  }
 }
 
 /* ---------- aba especial: procedimentos realizados (chave composta) ---------- */
 
 function montarAbaProcRealizado() {
+  const cfg = RECURSOS["procedimentos-realizados"];
   const raiz = document.getElementById("content");
   raiz.innerHTML = "";
-
-  raiz.append(el("div", { class: "aviso" },
-    "ℹ️ O backend não possui listagem geral de procedimentos realizados — " +
-    "a consulta é feita pela chave composta (atendimento + procedimento)."));
 
   const campos = [
     { nome: "id_atendimento", rotulo: "Atendimento", tipo: "lookup", recurso: "atendimentos",
@@ -412,16 +822,58 @@ function montarAbaProcRealizado() {
     { nome: "faturado", rotulo: "Já faturado?", tipo: "checkbox" },
   ];
 
+  /* --- formulário de registro/edição (chave composta) --- */
   const form = el("form", { class: "crud-form" });
   for (const campo of campos) form.append(criarCampo(campo));
 
   const botaoCriar = el("button", { class: "botao salvar", type: "submit" }, "Registrar");
-  const botaoBuscar = el("button", { class: "botao", type: "button", onclick: buscar }, "Buscar pela chave");
+  const botaoBuscarChave = el("button", { class: "botao", type: "button", onclick: buscar }, "Buscar pela chave");
   const botaoAtualizar = el("button", { class: "botao", type: "button", onclick: atualizar }, "Atualizar");
   const botaoExcluir = el("button", { class: "botao neutro", type: "button", onclick: excluir }, "Excluir");
-  form.append(el("div", { class: "acoes-form" }, botaoCriar, botaoBuscar, botaoAtualizar, botaoExcluir));
+  form.append(el("div", { class: "acoes-form" }, botaoCriar, botaoBuscarChave, botaoAtualizar, botaoExcluir));
 
   const resultado = el("div", { class: "tabela-wrap" });
+
+  /* --- consulta com filtros --- */
+  const formBusca = el("form", { class: "crud-form" });
+  for (const campo of cfg.busca) formBusca.append(criarCampo(campo));
+  const botaoBuscar = el("button", { class: "botao", type: "submit" }, "🔍 Buscar");
+  const botaoLimpar = el("button", { class: "botao neutro", type: "button", onclick: () => {
+    formBusca.reset();
+    formBusca.querySelectorAll("select").forEach(s => { s.value = ""; });
+    atualizarLista();
+  } }, "Limpar filtros");
+  formBusca.append(el("div", { class: "acoes-form" }, botaoBuscar, botaoLimpar));
+  formBusca.addEventListener("submit", (ev) => { ev.preventDefault(); atualizarLista(); });
+
+  const tituloResultados = el("h2", {}, "Resultados");
+  const areaLista = el("div");
+
+  async function atualizarLista() {
+    const filtros = lerFormulario(formBusca, cfg.busca);
+    areaLista.innerHTML = "";
+    areaLista.append(el("p", { class: "vazio" }, "Carregando..."));
+    try {
+      const itens = await chamarApi("GET", cfg.caminho + montarQuery(filtros));
+      const temFiltro = Object.values(filtros).some(v => v !== null && v !== undefined && v !== "");
+      tituloResultados.textContent = temFiltro
+        ? `Resultados da consulta (${itens.length})`
+        : `Todos os registros (${itens.length})`;
+      const tabela = await renderizarTabela("procedimentos-realizados", itens, {
+        aoClicar: (item) => {
+          preencherFormulario(form, campos, item);
+          mostrar(item);
+          cardForm.scrollIntoView({ behavior: "smooth" });
+          toast("Registro carregado no formulário para edição/exclusão.", "ok");
+        },
+      });
+      areaLista.innerHTML = "";
+      areaLista.append(tabela);
+    } catch (e) {
+      areaLista.innerHTML = "";
+      areaLista.append(el("p", { class: "vazio" }, "Erro ao consultar: " + e.message));
+    }
+  }
 
   function chaves() {
     const d = lerFormulario(form, campos);
@@ -438,6 +890,7 @@ function montarAbaProcRealizado() {
       await chamarApi("POST", "/procedimentos-realizados/", d);
       toast("Procedimento registrado no atendimento!", "ok");
       mostrar(d);
+      await atualizarLista();
     } catch (e) { toast(e.message, "erro"); }
   });
 
@@ -459,6 +912,7 @@ function montarAbaProcRealizado() {
       const item = await chamarApi("PUT", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`, corpo);
       mostrar(item);
       toast("Registro atualizado.", "ok");
+      await atualizarLista();
     } catch (e) { toast(e.message, "erro"); }
   }
 
@@ -469,6 +923,7 @@ function montarAbaProcRealizado() {
       await chamarApi("DELETE", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
       resultado.innerHTML = "";
       toast("Registro excluído.", "ok");
+      await atualizarLista();
     } catch (e) { toast(e.message, "erro"); }
   }
 
@@ -480,18 +935,24 @@ function montarAbaProcRealizado() {
     for (const c of cols) cab.append(el("th", {}, c));
     tabela.append(cab);
     const linha = el("tr");
-    for (const c of cols) {
-      let v = item[c];
-      if (v === null || v === undefined) v = "—";
-      if (typeof v === "boolean") v = v ? "sim" : "não";
-      linha.append(el("td", {}, String(v)));
-    }
+    for (const c of cols) linha.append(el("td", {}, formatarValor(c, item[c])));
     tabela.append(linha);
     resultado.append(tabela);
   }
 
-  raiz.append(el("div", { class: "card" }, el("h2", {}, "Procedimentos realizados em atendimentos"), form));
+  raiz.append(el("div", { class: "card" },
+    el("h2", {}, "🔎 Consultar procedimentos realizados"),
+    el("p", { class: "ajuda" },
+      "Filtre por atendimento, procedimento ou faturamento. Clique em um resultado para carregá-lo no formulário abaixo."),
+    formBusca));
+  raiz.append(el("div", { class: "card" }, tituloResultados, areaLista));
+
+  const cardForm = el("div", { class: "card" },
+    el("h2", {}, "➕ Registrar / editar procedimento realizado"), form);
+  raiz.append(cardForm);
   raiz.append(el("div", { class: "card" }, el("h2", {}, "Registro consultado"), resultado));
+
+  atualizarLista();
 }
 
 /* ---------- navegação por abas ---------- */
@@ -499,17 +960,11 @@ function montarAbaProcRealizado() {
 function montarTabs() {
   const nav = document.getElementById("tabs");
   for (const [chaveRecurso, cfg] of Object.entries(RECURSOS)) {
-    const botao = el("button", { onclick: () => selecionar(chaveRecurso, botao) }, cfg.titulo);
+    const botao = el("button", { onclick: () => ativarAba(chaveRecurso) }, cfg.titulo);
     botao.dataset.recurso = chaveRecurso;
     nav.append(botao);
   }
-  function selecionar(chaveRecurso, botao) {
-    document.querySelectorAll("#tabs button").forEach(b => b.classList.remove("ativa"));
-    botao.classList.add("ativa");
-    if (RECURSOS[chaveRecurso].especial === "procRealizado") montarAbaProcRealizado();
-    else montarAbaCrud(chaveRecurso);
-  }
-  nav.querySelector("button").click();
+  ativarAba(Object.keys(RECURSOS)[0]);
 }
 
 /* ---------- status da API ---------- */
