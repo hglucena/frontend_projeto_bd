@@ -1,7 +1,7 @@
 # Frontend — Sistema de Gestão Hospitalar Dra. Yuska Maritan Brito
 
-Interface web para o CRUD do projeto de Banco de Dados. Consome a API FastAPI
-do repositório [backend_projeto_bd](https://github.com/brunocostaar/backend_projeto_bd).
+Interface web para o projeto de Banco de Dados. Consome a API FastAPI do
+repositório [backend_projeto_bd](https://github.com/brunocostaar/backend_projeto_bd).
 
 Sem frameworks e sem `npm install`: HTML, CSS e JavaScript puros, servidos por
 um pequeno servidor Python (biblioteca padrão) que também faz proxy das
@@ -32,45 +32,79 @@ e não há problema de CORS, sem precisar alterar nada no backend.
 | Arquivo      | Papel                                                        |
 |--------------|--------------------------------------------------------------|
 | `index.html` | Página única com navegação por abas                          |
-| `app.js`     | Lógica: formulários, tabelas e chamadas à API                |
+| `app.js`     | Motor da interface: formulários, tabelas, perfis e abas da Etapa 1 |
+| `etapa2.js`  | Abas da Etapa 2: views, procedures, auditoria, consultas e concorrência |
 | `style.css`  | Estilo                                                       |
 | `server.py`  | Servidor estático + proxy `/api` → `localhost:8000`          |
 
-## Funcionalidades
+`etapa2.js` é carregado antes do `app.js` e apenas define funções. O `app.js`
+chama `registrarRecursosEtapa2` antes de montar a barra de abas, o que mantém o
+arquivo da Etapa 1 quase intocado.
 
-Cada aba tem três áreas, nesta ordem: **Consultar** (filtros de busca),
-**Resultados** (tabela) e **Cadastrar/editar** (formulário).
+## Chave entre as duas implementações
 
-- Consulta com filtros em todas as abas: nome/CPF parcial para pessoas,
-  especialidade e ano de residência para residentes, nível de risco para
-  procedimentos, paciente/residente/preceptor/dia para atendimentos,
-  unidade/dia/turno para escalas etc. Os filtros viram query string e a
+O cabeçalho tem um seletor com duas opções:
+
+- **Etapa 1 — SQL puro**: as abas de CRUD falam com as rotas na raiz da API
+- **Etapa 2 — ORM (SQLAlchemy)**: as mesmas abas falam com as rotas sob `/orm`
+
+A troca acontece na hora, sem recarregar a página, e serve para comparar as
+duas implementações nas mesmas telas. Duas diferenças ficam visíveis:
+
+- Preceptores só têm os botões de editar e excluir no modo ORM, porque a
+  Etapa 1 não expõe essas operações
+- A unidade do atendimento e a versão da escala só são gravadas no modo ORM;
+  no modo Etapa 1 essas colunas aparecem vazias
+
+As abas próprias da Etapa 2 têm caminho fixo e não acompanham a chave, já que
+essas funcionalidades só existem na Etapa 2.
+
+## Abas
+
+### Etapa 1
+
+Pacientes, Preceptores, Residentes, Atendimentos, Procedimentos, Proc.
+Realizados, Escalas, Relatórios e Unidades. Cada uma tem três áreas, nesta
+ordem: **Consultar** (filtros), **Resultados** (tabela) e **Cadastrar/editar**
+(formulário).
+
+- Consulta com filtros em todas as abas. Os filtros viram query string e a
   busca é feita em SQL no backend.
-- Perfil: clicar em qualquer resultado abre o perfil completo do registro,
-  com os dados relacionados — atendimentos do paciente, escalas e
-  atendimentos do residente/preceptor, procedimentos realizados do
-  atendimento, escalas da unidade. As listas relacionadas também são
-  clicáveis (dá para navegar de um paciente para um atendimento dele, por
-  exemplo) e o botão "← Voltar" preserva a busca feita.
-- Tabelas de atendimentos e escalas mostram os nomes das pessoas e
-  unidades no lugar dos ids.
-- Pacientes: cadastrar, listar, editar e excluir. As alergias separadas por
-  vírgula viram linhas na tabela `alergia` do banco.
-- Preceptores: cadastrar e listar (o backend ainda não expõe editar/excluir)
-- Residentes: CRUD completo, com ano de residência restrito a R1, R2 e R3
-- Atendimentos: CRUD completo, com seleção de paciente, residente e
-  preceptor por nome
-- Procedimentos: CRUD completo
-- Procedimentos realizados: listagem geral com filtros, além de registrar,
-  buscar, atualizar e excluir pela chave composta (atendimento e
-  procedimento)
-- Escalas: CRUD completo, com dia da semana e turno restritos aos valores
-  aceitos pelo banco
-- Unidades: CRUD completo
+- Perfil: clicar em qualquer resultado abre o registro completo, com os dados
+  relacionados. As listas relacionadas também são clicáveis, e o botão
+  "← Voltar" preserva a busca feita.
+- Tabelas de atendimentos e escalas mostram nomes no lugar dos ids.
+- Os erros da API aparecem como notificação no canto da tela, com a mensagem
+  original do backend.
 
-Os erros da API (validações, conflitos de escala, restrições do banco)
-aparecem como notificação no canto da tela, com a mensagem original do
-backend.
+### Etapa 2
+
+| Aba | Conteúdo |
+|---|---|
+| **Internações** | CRUD da entidade nova. O perfil de uma internação aberta tem o botão de dar alta. |
+| **Views** | As três views do banco, cada uma num cartão com o critério explicado. |
+| **Procedures** | Registrar atendimento completo (com lista dinâmica de procedimentos) e reajustar escala. |
+| **Auditoria** | Histórico gravado pelo trigger, com filtros e uma coluna que compara os JSON e mostra o que mudou. |
+| **Consultas ORM** | As três consultas avançadas, a medição de carregamento e as quatro analíticas da Etapa 1 em DSL. |
+| **Concorrência** | Botão que roda os três cenários de disputa por uma escala e mostra os logs das duas sessões. |
+
+## Detalhes que valem saber ao usar
+
+**Registrar atendimento completo** é a forma mais direta de ver a transação em
+ação. Se você escolher o mesmo procedimento duas vezes na lista, a chave
+primária composta recusa e o atendimento inteiro é desfeito, com a mensagem do
+banco na notificação.
+
+**Reajustar escala** funciona movendo o residente 14 de sexta/manhã para
+quinta/manhã. Tentar mover o residente 12 de quinta/manhã para segunda/manhã é
+recusado, porque ele já tem plantão nesse horário. A tabela abaixo do
+formulário mostra a coluna versão subindo a cada alteração aceita.
+
+**Auditoria** não recebe escrita de nenhuma rota da API. Para gerar linhas
+novas, crie, edite ou apague um atendimento na aba Atendimentos e volte.
+
+**Concorrência** leva alguns segundos, porque o cenário pessimista envolve
+espera real por bloqueio. O que a simulação cria é apagado no fim.
 
 ## Demonstração das 6 funcionalidades da Etapa 3
 

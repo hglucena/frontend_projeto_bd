@@ -10,6 +10,9 @@
 <header>
   <h1>🏥 Hospital Universitário Dra. Yuska Maritan Brito</h1>
   <p id="api-status">verificando conexão com a API...</p>
+  <!-- Alterna o CRUD entre as rotas em SQL puro da Etapa 1 e as rotas em ORM
+       da Etapa 2. As abas próprias da Etapa 2 têm caminho fixo. -->
+  <div id="modo-api"></div>
 </header>
 
 <nav id="tabs"></nav>
@@ -18,6 +21,9 @@
 
 <div id="toast" class="hidden"></div>
 
+<!-- etapa2.js vem primeiro: ele só define funções, e o app.js as usa ao montar
+     a barra de abas. -->
+<script src="etapa2.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

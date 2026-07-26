@@ -214,3 +214,38 @@ button.excluir-perfil { background: var(--vermelho); }
   margin-bottom: 14px;
   color: #6d5410;
 }
+
+/* --- Etapa 2 --- */
+
+/* Chave entre a implementação em SQL puro e a com ORM */
+#modo-api { margin-top: 10px; font-size: 0.85rem; }
+
+#modo-api label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #dce9f5;
+}
+
+#modo-api select {
+  padding: 5px 8px;
+  border: 1px solid var(--azul);
+  border-radius: 5px;
+  font-size: 0.85rem;
+  background: #fff;
+  color: #222;
+}
+
+/* Cada procedimento da lista de sp_registrar_atendimento_completo */
+form.linha-procedimento {
+  border: 1px dashed var(--borda);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fafcfe;
+}
+
+button.botao:disabled {
+  background: #adb5bd;
+  cursor: progress;
+}

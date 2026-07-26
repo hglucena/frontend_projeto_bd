@@ -5,6 +5,24 @@
 
 const API = "/api";
 
+/* Modo da API. A mesma tela conversa com as rotas em SQL puro da Etapa 1 ou
+   com as rotas em ORM da Etapa 2, que expõem as mesmas operações sob /orm.
+   O seletor no cabeçalho troca o prefixo em tempo de execução, o que permite
+   comparar as duas implementações sem sair da página. */
+let MODO_API = "";   // "" = Etapa 1 (SQL puro) | "/orm" = Etapa 2 (ORM)
+
+/* Recursos marcados com semModo têm caminho próprio e ignoram a chave. */
+function caminhoDe(cfg) {
+  return (cfg.semModo ? "" : MODO_API) + cfg.caminho;
+}
+
+/* Algumas permissões dependem do modo: a Etapa 1 não expõe editar nem excluir
+   preceptor, a Etapa 2 expõe. Por isso o valor pode ser função. */
+function permite(cfg, acao) {
+  const valor = cfg[acao];
+  return typeof valor === "function" ? valor() : Boolean(valor);
+}
+
 /* ---------- utilitários ---------- */
 
 let cacheListas = {}; // cache das listagens (lookups e decoração de tabelas)
@@ -35,11 +53,13 @@ async function chamarApi(metodo, caminho, corpo) {
 }
 
 function listaCacheada(chaveRecurso) {
-  if (!cacheListas[chaveRecurso]) {
-    cacheListas[chaveRecurso] = chamarApi("GET", RECURSOS[chaveRecurso].caminho)
-      .catch(e => { delete cacheListas[chaveRecurso]; throw e; });
+  // A chave inclui o modo: a mesma listagem pode vir da Etapa 1 ou da Etapa 2.
+  const chave = MODO_API + ":" + chaveRecurso;
+  if (!cacheListas[chave]) {
+    cacheListas[chave] = chamarApi("GET", caminhoDe(RECURSOS[chaveRecurso]))
+      .catch(e => { delete cacheListas[chave]; throw e; });
   }
-  return cacheListas[chaveRecurso];
+  return cacheListas[chave];
 }
 
 async function mapaPorId(chaveRecurso, campoId) {
@@ -140,8 +160,10 @@ const RECURSOS = {
     titulo: "Preceptores",
     caminho: "/preceptores/",
     chave: ["id_pessoa"],
-    podeEditar: false,   // o backend só oferece criar e listar
-    podeExcluir: false,
+    // A Etapa 1 só oferece criar e listar preceptor. A camada ORM da Etapa 2
+    // completou o CRUD, então os botões aparecem apenas no modo ORM.
+    podeEditar: () => MODO_API === "/orm",
+    podeExcluir: () => MODO_API === "/orm",
     campos: [
       ...camposPessoa,
       { nome: "CRM", rotulo: "CRM", tipo: "text", obrigatorio: true },
@@ -209,19 +231,26 @@ const RECURSOS = {
       { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores", decorado: "preceptor",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do preceptor (seed: 6 a 10)" },
+      // Coluna da Etapa 2. As rotas em SQL puro da Etapa 1 ignoram este campo,
+      // então no modo Etapa 1 a unidade aparece vazia na tabela.
+      { nome: "id_unidade", rotulo: "Unidade", tipo: "lookup", recurso: "unidades", decorado: "unidade",
+        rotuloOpcao: u => `${u.id_unidade} — ${u.nome}`, valorOpcao: u => u.id_unidade,
+        dica: "gravada só no modo ORM" },
     ],
-    colunas: ["id_atendimento", "data_hora", "duracao_minutos", "paciente", "residente", "preceptor"],
+    colunas: ["id_atendimento", "data_hora", "duracao_minutos", "paciente", "residente", "preceptor", "unidade"],
     decorar: async (itens) => {
-      const [pac, res, pre] = await Promise.all([
+      const [pac, res, pre, uni] = await Promise.all([
         mapaPorId("pacientes", "id_pessoa"),
         mapaPorId("residentes", "id_pessoa"),
         mapaPorId("preceptores", "id_pessoa"),
+        mapaPorId("unidades", "id_unidade"),
       ]);
       return itens.map(a => ({
         ...a,
         paciente: rotularPessoa(pac, a.id_paciente),
         residente: rotularPessoa(res, a.id_residente),
         preceptor: rotularPessoa(pre, a.id_preceptor),
+        unidade: uni[a.id_unidade] ? `${uni[a.id_unidade].nome} (id ${a.id_unidade})` : null,
       }));
     },
     busca: [
@@ -253,7 +282,10 @@ const RECURSOS = {
       { nome: "tempo_medio_minutos", rotulo: "Tempo médio (min)", tipo: "number", obrigatorio: true, min: 1 },
       { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select", opcoes: ["BAIXO", "MEDIO", "ALTO"], obrigatorio: true },
     ],
-    colunas: ["id_procedimento", "codigo", "nome", "tempo_medio_minutos", "nivel_risco"],
+    // media_tempo_procedimento é mantida pelo trigger da Etapa 2 e só vem nas
+    // rotas ORM. Não há campo dela no formulário: a aplicação não escreve nessa
+    // coluna, quem escreve é o banco.
+    colunas: ["id_procedimento", "codigo", "nome", "tempo_medio_minutos", "nivel_risco", "media_tempo_procedimento"],
     busca: [
       { nome: "nome", rotulo: "Nome contém", tipo: "text" },
       { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select", opcoes: ["BAIXO", "MEDIO", "ALTO"] },
@@ -314,7 +346,8 @@ const RECURSOS = {
       { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores", decorado: "preceptor",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
     ],
-    colunas: ["id_escala", "unidade", "dia_semana", "turno", "residente", "preceptor"],
+    // versao entra no controle de concorrência otimista e só vem nas rotas ORM.
+    colunas: ["id_escala", "unidade", "dia_semana", "turno", "residente", "preceptor", "versao"],
     decorar: async (itens) => {
       const [uni, res, pre] = await Promise.all([
         mapaPorId("unidades", "id_unidade"),
@@ -530,8 +563,11 @@ function voltar() {
 }
 
 function montarVisaoAba(chaveRecurso, opcoes) {
-  if (RECURSOS[chaveRecurso].especial === "procRealizado") montarAbaProcRealizado();
-  else if (RECURSOS[chaveRecurso].especial === "relatorios") montarAbaRelatorios();
+  const cfg = RECURSOS[chaveRecurso];
+  // Abas com construtor próprio (as da Etapa 2, em etapa2.js) trazem montar().
+  if (typeof cfg.montar === "function") cfg.montar();
+  else if (cfg.especial === "procRealizado") montarAbaProcRealizado();
+  else if (cfg.especial === "relatorios") montarAbaRelatorios();
   else montarAbaCrud(chaveRecurso, opcoes);
 }
 
@@ -616,10 +652,10 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
     const dados = lerFormulario(form, cfg.campos);
     try {
       if (idEmEdicao.valor === null) {
-        await chamarApi("POST", cfg.caminho, dados);
+        await chamarApi("POST", caminhoDe(cfg), dados);
         toast(`${cfg.titulo}: cadastrado com sucesso!`, "ok");
       } else {
-        await chamarApi("PUT", cfg.caminho + idEmEdicao.valor, dados);
+        await chamarApi("PUT", caminhoDe(cfg) + idEmEdicao.valor, dados);
         toast(`${cfg.titulo}: atualizado com sucesso!`, "ok");
       }
       cancelarEdicao();
@@ -632,18 +668,18 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
   function montarAcoes(item) {
     const botoes = [];
     const id = item[cfg.chave[0]];
-    if (cfg.podeEditar) {
+    if (permite(cfg, "podeEditar")) {
       botoes.push(el("button", { class: "editar", onclick: (ev) => {
         ev.stopPropagation();
         iniciarEdicao(item);
       } }, "Editar"));
     }
-    if (cfg.podeExcluir) {
+    if (permite(cfg, "podeExcluir")) {
       botoes.push(el("button", { class: "excluir", onclick: async (ev) => {
         ev.stopPropagation();
         if (!confirm(`Excluir registro ${id}?`)) return;
         try {
-          await chamarApi("DELETE", cfg.caminho + id);
+          await chamarApi("DELETE", caminhoDe(cfg) + id);
           toast("Registro excluído.", "ok");
           await atualizarTabela();
         } catch (e) { toast(e.message, "erro"); }
@@ -659,7 +695,7 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
     areaTabela.append(el("p", { class: "vazio" }, "Carregando..."));
     let itens;
     try {
-      itens = await chamarApi("GET", cfg.caminho + montarQuery(filtros));
+      itens = await chamarApi("GET", caminhoDe(cfg) + montarQuery(filtros));
     } catch (e) {
       areaTabela.innerHTML = "";
       areaTabela.append(el("p", { class: "vazio" }, "Erro ao consultar: " + e.message));
@@ -670,7 +706,7 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
       ? `Resultados da consulta (${itens.length})`
       : `Todos os registros (${itens.length})`;
     const tabela = await renderizarTabela(chaveRecurso, itens, {
-      acoes: (cfg.podeEditar || cfg.podeExcluir) ? montarAcoes : undefined,
+      acoes: (permite(cfg, "podeEditar") || permite(cfg, "podeExcluir")) ? montarAcoes : undefined,
     });
     areaTabela.innerHTML = "";
     areaTabela.append(tabela);
@@ -708,20 +744,25 @@ async function montarPerfil(chaveRecurso, item) {
   }
 
   const acoes = el("div", { class: "acoes-form" });
-  if (cfg.podeEditar) {
+  if (permite(cfg, "podeEditar")) {
     acoes.append(el("button", { class: "botao", onclick: () => ativarAba(chaveRecurso, { editar: item }) },
       "✏️ Editar no formulário"));
   }
-  if (cfg.podeExcluir) {
+  if (permite(cfg, "podeExcluir")) {
     acoes.append(el("button", { class: "botao excluir-perfil", onclick: async () => {
       const id = item[cfg.chave[0]];
       if (!confirm(`Excluir registro ${id}?`)) return;
       try {
-        await chamarApi("DELETE", cfg.caminho + id);
+        await chamarApi("DELETE", caminhoDe(cfg) + id);
         toast("Registro excluído.", "ok");
         ativarAba(chaveRecurso);
       } catch (e) { toast(e.message, "erro"); }
     } }, "🗑 Excluir"));
+  }
+
+  // Ações específicas de um recurso, como dar alta numa internação.
+  if (cfg.perfil && typeof cfg.perfil.acoesExtra === "function") {
+    for (const botao of cfg.perfil.acoesExtra(item)) acoes.append(botao);
   }
 
   const identificacao = cfg.chave.map(c => `${c.replaceAll("_", " ")}: ${item[c]}`).join(" · ");
@@ -739,7 +780,7 @@ async function montarPerfil(chaveRecurso, item) {
     (async () => {
       try {
         const alvo = RECURSOS[rel.recurso];
-        const itens = await chamarApi("GET", `${alvo.caminho}?${rel.parametro}=${item[cfg.chave[0]]}`);
+        const itens = await chamarApi("GET", `${caminhoDe(alvo)}?${rel.parametro}=${item[cfg.chave[0]]}`);
         const tabela = await renderizarTabela(rel.recurso, itens);
         area.innerHTML = "";
         area.append(tabela);
@@ -768,7 +809,7 @@ async function montarAbaRelatorios() {
 
   try {
     const [dados, residentes] = await Promise.all([
-      chamarApi("GET", "/atendimentos/tempo-medio-por-residente"),
+      chamarApi("GET", MODO_API + "/atendimentos/tempo-medio-por-residente"),
       listaCacheada("residentes"),
     ]);
     const porId = {};
@@ -854,7 +895,7 @@ function montarAbaProcRealizado() {
     areaLista.innerHTML = "";
     areaLista.append(el("p", { class: "vazio" }, "Carregando..."));
     try {
-      const itens = await chamarApi("GET", cfg.caminho + montarQuery(filtros));
+      const itens = await chamarApi("GET", caminhoDe(cfg) + montarQuery(filtros));
       const temFiltro = Object.values(filtros).some(v => v !== null && v !== undefined && v !== "");
       tituloResultados.textContent = temFiltro
         ? `Resultados da consulta (${itens.length})`
@@ -887,7 +928,7 @@ function montarAbaProcRealizado() {
     ev.preventDefault();
     try {
       const d = chaves();
-      await chamarApi("POST", "/procedimentos-realizados/", d);
+      await chamarApi("POST", MODO_API + "/procedimentos-realizados/", d);
       toast("Procedimento registrado no atendimento!", "ok");
       mostrar(d);
       await atualizarLista();
@@ -897,7 +938,7 @@ function montarAbaProcRealizado() {
   async function buscar() {
     try {
       const d = chaves();
-      const item = await chamarApi("GET", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
+      const item = await chamarApi("GET", `${MODO_API}/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
       preencherFormulario(form, campos, item);
       mostrar(item);
       toast("Registro encontrado.", "ok");
@@ -909,7 +950,7 @@ function montarAbaProcRealizado() {
       const d = chaves();
       const corpo = { quantidade: d.quantidade, tempo_real_minutos: d.tempo_real_minutos,
                       observacao: d.observacao, faturado: d.faturado };
-      const item = await chamarApi("PUT", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`, corpo);
+      const item = await chamarApi("PUT", `${MODO_API}/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`, corpo);
       mostrar(item);
       toast("Registro atualizado.", "ok");
       await atualizarLista();
@@ -920,7 +961,7 @@ function montarAbaProcRealizado() {
     try {
       const d = chaves();
       if (!confirm("Excluir este procedimento realizado?")) return;
-      await chamarApi("DELETE", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
+      await chamarApi("DELETE", `${MODO_API}/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
       resultado.innerHTML = "";
       toast("Registro excluído.", "ok");
       await atualizarLista();
@@ -959,12 +1000,39 @@ function montarAbaProcRealizado() {
 
 function montarTabs() {
   const nav = document.getElementById("tabs");
+  nav.innerHTML = "";   // a troca de modo reconstrói a barra
   for (const [chaveRecurso, cfg] of Object.entries(RECURSOS)) {
     const botao = el("button", { onclick: () => ativarAba(chaveRecurso) }, cfg.titulo);
     botao.dataset.recurso = chaveRecurso;
     nav.append(botao);
   }
-  ativarAba(Object.keys(RECURSOS)[0]);
+  const inicial = abaAtiva && RECURSOS[abaAtiva] ? abaAtiva : Object.keys(RECURSOS)[0];
+  ativarAba(inicial);
+}
+
+/* ---------- chave entre a implementação da Etapa 1 e a da Etapa 2 ---------- */
+
+function montarSeletorDeModo() {
+  const area = document.getElementById("modo-api");
+  if (!area) return;
+  const seletor = el("select", { onchange: (ev) => trocarModo(ev.target.value) },
+    el("option", { value: "" }, "Etapa 1 — SQL puro"),
+    el("option", { value: "/orm" }, "Etapa 2 — ORM (SQLAlchemy)"));
+  seletor.value = MODO_API;
+  area.append(el("label", {}, "Implementação: ", seletor));
+}
+
+/* Troca o prefixo das rotas de CRUD. As abas da Etapa 2 (views, procedures,
+   auditoria, consultas, concorrência) têm caminho fixo e não são afetadas. */
+function trocarModo(valor) {
+  MODO_API = valor;
+  cacheListas = {};
+  pilhaVoltar = [];
+  for (const chave of Object.keys(estadoBusca)) delete estadoBusca[chave];
+  toast(valor === "/orm"
+    ? "CRUD apontando para as rotas ORM da Etapa 2 (/orm)."
+    : "CRUD apontando para as rotas em SQL puro da Etapa 1.", "ok");
+  montarTabs();
 }
 
 /* ---------- status da API ---------- */
@@ -981,5 +1049,11 @@ async function verificarApi() {
   }
 }
 
+/* etapa2.js é carregado antes deste arquivo e define registrarRecursosEtapa2,
+   que acrescenta as abas da Etapa 2 ao RECURSOS. O teste mantém o app.js
+   funcionando sozinho, caso o outro arquivo não seja carregado. */
+if (typeof registrarRecursosEtapa2 === "function") registrarRecursosEtapa2(RECURSOS);
+
 verificarApi();
+montarSeletorDeModo();
 montarTabs();
