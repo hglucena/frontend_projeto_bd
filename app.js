@@ -37,7 +37,7 @@ async function chamarApi(metodo, caminho, corpo) {
   try {
     resposta = await fetch(API + caminho, opcoes);
   } catch (e) {
-    throw new Error("Não foi possível falar com a API. O backend está rodando na porta 8000?");
+    throw new Error("Sem resposta da API. Confira se o backend está no ar na porta 8000.");
   }
   if (metodo !== "GET") cacheListas = {}; // dados mudaram: invalida o cache
   if (resposta.status === 204) return null;
@@ -149,7 +149,7 @@ const RECURSOS = {
       { nome: "grupo_sanguineo", rotulo: "Grupo sanguíneo", tipo: "select", opcoes: GRUPOS_SANGUINEOS },
     ],
     perfil: {
-      rotuloItem: p => `🧑 Paciente — ${p.nome}`,
+      rotuloItem: p => `Paciente: ${p.nome}`,
       relacionados: [
         { titulo: "Atendimentos deste paciente", recurso: "atendimentos", parametro: "id_paciente" },
       ],
@@ -177,7 +177,7 @@ const RECURSOS = {
       { nome: "especialidade", rotulo: "Especialidade contém", tipo: "text" },
     ],
     perfil: {
-      rotuloItem: p => `🩺 Preceptor — ${p.nome}`,
+      rotuloItem: p => `Preceptor: ${p.nome}`,
       relacionados: [
         { titulo: "Atendimentos supervisionados por este preceptor", recurso: "atendimentos", parametro: "id_preceptor" },
         { titulo: "Escalas deste preceptor", recurso: "escalas", parametro: "id_preceptor" },
@@ -205,7 +205,7 @@ const RECURSOS = {
       { nome: "ano_residencia", rotulo: "Ano de residência", tipo: "select", opcoes: ["R1", "R2", "R3"] },
     ],
     perfil: {
-      rotuloItem: p => `🎓 Residente — ${p.nome}`,
+      rotuloItem: p => `Residente: ${p.nome}`,
       relacionados: [
         { titulo: "Atendimentos deste residente", recurso: "atendimentos", parametro: "id_residente" },
         { titulo: "Escalas deste residente", recurso: "escalas", parametro: "id_residente" },
@@ -263,7 +263,7 @@ const RECURSOS = {
       { nome: "data", rotulo: "Data (dia exato)", tipo: "date" },
     ],
     perfil: {
-      rotuloItem: a => `📋 Atendimento nº ${a.id_atendimento}`,
+      rotuloItem: a => `Atendimento nº ${a.id_atendimento}`,
       relacionados: [
         { titulo: "Procedimentos realizados neste atendimento", recurso: "procedimentos-realizados", parametro: "id_atendimento" },
       ],
@@ -292,9 +292,9 @@ const RECURSOS = {
       { nome: "codigo", rotulo: "Código", tipo: "number" },
     ],
     perfil: {
-      rotuloItem: p => `💉 Procedimento — ${p.nome}`,
+      rotuloItem: p => `Procedimento: ${p.nome}`,
       relacionados: [
-        { titulo: "Atendimentos em que este procedimento foi realizado", recurso: "procedimentos-realizados", parametro: "id_procedimento" },
+        { titulo: "Atendimentos com este procedimento", recurso: "procedimentos-realizados", parametro: "id_procedimento" },
       ],
     },
   },
@@ -372,13 +372,13 @@ const RECURSOS = {
       { nome: "turno", rotulo: "Turno", tipo: "select", opcoes: TURNOS },
     ],
     perfil: {
-      rotuloItem: e => `🗓️ Escala nº ${e.id_escala}`,
+      rotuloItem: e => `Escala nº ${e.id_escala}`,
       relacionados: [],
     },
   },
 
   relatorios: {
-    titulo: "📊 Relatórios",
+    titulo: "Relatórios",
     especial: "relatorios",
   },
 
@@ -399,7 +399,7 @@ const RECURSOS = {
       { nome: "tipo", rotulo: "Tipo contém", tipo: "text" },
     ],
     perfil: {
-      rotuloItem: u => `🏥 Unidade — ${u.nome}`,
+      rotuloItem: u => `Unidade: ${u.nome}`,
       relacionados: [
         { titulo: "Escalas desta unidade", recurso: "escalas", parametro: "id_unidade" },
       ],
@@ -533,7 +533,7 @@ async function renderizarTabela(chaveRecurso, itens, opcoes = {}) {
     }
     if (aoClicar) {
       linha.classList.add("clicavel");
-      linha.title = "Clique para abrir o perfil";
+      linha.title = "Abrir perfil";
       linha.addEventListener("click", () => aoClicar(item));
     }
     tabela.append(linha);
@@ -587,13 +587,13 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
   const raiz = document.getElementById("content");
   raiz.innerHTML = "";
 
-  if (cfg.aviso) raiz.append(el("div", { class: "aviso" }, "⚠️ " + cfg.aviso));
+  if (cfg.aviso) raiz.append(el("div", { class: "aviso" }, cfg.aviso));
 
   /* --- consulta --- */
   const camposBusca = cfg.busca || [];
   const formBusca = el("form", { class: "crud-form" });
   for (const campo of camposBusca) formBusca.append(criarCampo(campo));
-  const botaoBuscar = el("button", { class: "botao", type: "submit" }, "🔍 Buscar");
+  const botaoBuscar = el("button", { class: "botao", type: "submit" }, "Buscar");
   const botaoLimpar = el("button", { class: "botao neutro", type: "button", onclick: () => {
     formBusca.reset();
     formBusca.querySelectorAll("select").forEach(s => { s.value = ""; });
@@ -604,9 +604,9 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
   formBusca.addEventListener("submit", (ev) => { ev.preventDefault(); atualizarTabela(); });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "🔎 Consultar " + cfg.titulo.toLowerCase()),
+    el("h2", {}, "Consultar " + cfg.titulo.toLowerCase()),
     el("p", { class: "ajuda" },
-      "Preencha um ou mais filtros e clique em Buscar. Clique em um resultado para abrir o perfil completo."),
+      "Filtro vazio traz a lista inteira. Clicar numa linha abre o perfil do registro."),
     formBusca));
 
   // restaura a última busca desta aba (ex.: ao voltar de um perfil)
@@ -628,7 +628,7 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
   form.append(el("div", { class: "acoes-form" }, botaoSalvar, botaoCancelar));
 
   const cardCadastro = el("div", { class: "card" },
-    el("h2", {}, "➕ " + (cfg.podeEditar ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()),
+    el("h2", {}, (cfg.podeEditar ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()),
     form);
   raiz.append(cardCadastro);
 
@@ -653,10 +653,10 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
     try {
       if (idEmEdicao.valor === null) {
         await chamarApi("POST", caminhoDe(cfg), dados);
-        toast(`${cfg.titulo}: cadastrado com sucesso!`, "ok");
+        toast(`${cfg.titulo}: registro cadastrado.`, "ok");
       } else {
         await chamarApi("PUT", caminhoDe(cfg) + idEmEdicao.valor, dados);
-        toast(`${cfg.titulo}: atualizado com sucesso!`, "ok");
+        toast(`${cfg.titulo}: registro atualizado.`, "ok");
       }
       cancelarEdicao();
       await atualizarTabela();
@@ -746,7 +746,7 @@ async function montarPerfil(chaveRecurso, item) {
   const acoes = el("div", { class: "acoes-form" });
   if (permite(cfg, "podeEditar")) {
     acoes.append(el("button", { class: "botao", onclick: () => ativarAba(chaveRecurso, { editar: item }) },
-      "✏️ Editar no formulário"));
+      "Editar no formulário"));
   }
   if (permite(cfg, "podeExcluir")) {
     acoes.append(el("button", { class: "botao excluir-perfil", onclick: async () => {
@@ -757,7 +757,7 @@ async function montarPerfil(chaveRecurso, item) {
         toast("Registro excluído.", "ok");
         ativarAba(chaveRecurso);
       } catch (e) { toast(e.message, "erro"); }
-    } }, "🗑 Excluir"));
+    } }, "Excluir"));
   }
 
   // Ações específicas de um recurso, como dar alta numa internação.
@@ -801,10 +801,9 @@ async function montarAbaRelatorios() {
   const area = el("div", { class: "tabela-wrap" });
   area.append(el("p", { class: "vazio" }, "Carregando..."));
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "⏱️ Tempo médio de duração dos atendimentos por residente"),
+    el("h2", {}, "Tempo médio de duração dos atendimentos por residente"),
     el("p", { class: "ajuda" },
-      "Calculado pelo banco com AVG + GROUP BY (LEFT JOIN inclui residente sem atendimento). " +
-      "Clique em um residente para abrir o perfil."),
+      "AVG com GROUP BY feito no banco. O LEFT JOIN mantém na lista o residente que ainda não atendeu ninguém."),
     area));
 
   try {
@@ -831,7 +830,7 @@ async function montarAbaRelatorios() {
       const residente = porId[d.id_residente];
       if (residente) {
         linha.classList.add("clicavel");
-        linha.title = "Clique para abrir o perfil";
+        linha.title = "Abrir perfil";
         linha.addEventListener("click", () => abrirPerfil("residentes", residente));
       }
       tabela.append(linha);
@@ -878,7 +877,7 @@ function montarAbaProcRealizado() {
   /* --- consulta com filtros --- */
   const formBusca = el("form", { class: "crud-form" });
   for (const campo of cfg.busca) formBusca.append(criarCampo(campo));
-  const botaoBuscar = el("button", { class: "botao", type: "submit" }, "🔍 Buscar");
+  const botaoBuscar = el("button", { class: "botao", type: "submit" }, "Buscar");
   const botaoLimpar = el("button", { class: "botao neutro", type: "button", onclick: () => {
     formBusca.reset();
     formBusca.querySelectorAll("select").forEach(s => { s.value = ""; });
@@ -905,7 +904,7 @@ function montarAbaProcRealizado() {
           preencherFormulario(form, campos, item);
           mostrar(item);
           cardForm.scrollIntoView({ behavior: "smooth" });
-          toast("Registro carregado no formulário para edição/exclusão.", "ok");
+          toast("Registro carregado no formulário.", "ok");
         },
       });
       areaLista.innerHTML = "";
@@ -929,7 +928,7 @@ function montarAbaProcRealizado() {
     try {
       const d = chaves();
       await chamarApi("POST", MODO_API + "/procedimentos-realizados/", d);
-      toast("Procedimento registrado no atendimento!", "ok");
+      toast("Procedimento registrado no atendimento.", "ok");
       mostrar(d);
       await atualizarLista();
     } catch (e) { toast(e.message, "erro"); }
@@ -982,14 +981,14 @@ function montarAbaProcRealizado() {
   }
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "🔎 Consultar procedimentos realizados"),
+    el("h2", {}, "Consultar procedimentos realizados"),
     el("p", { class: "ajuda" },
-      "Filtre por atendimento, procedimento ou faturamento. Clique em um resultado para carregá-lo no formulário abaixo."),
+      "Clicar numa linha carrega o registro no formulário abaixo."),
     formBusca));
   raiz.append(el("div", { class: "card" }, tituloResultados, areaLista));
 
   const cardForm = el("div", { class: "card" },
-    el("h2", {}, "➕ Registrar / editar procedimento realizado"), form);
+    el("h2", {}, "Registrar / editar procedimento realizado"), form);
   raiz.append(cardForm);
   raiz.append(el("div", { class: "card" }, el("h2", {}, "Registro consultado"), resultado));
 
@@ -1016,8 +1015,8 @@ function montarSeletorDeModo() {
   const area = document.getElementById("modo-api");
   if (!area) return;
   const seletor = el("select", { onchange: (ev) => trocarModo(ev.target.value) },
-    el("option", { value: "" }, "Etapa 1 — SQL puro"),
-    el("option", { value: "/orm" }, "Etapa 2 — ORM (SQLAlchemy)"));
+    el("option", { value: "" }, "Etapa 1 (SQL puro)"),
+    el("option", { value: "/orm" }, "Etapa 2 (ORM SQLAlchemy)"));
   seletor.value = MODO_API;
   area.append(el("label", {}, "Implementação: ", seletor));
 }
@@ -1030,8 +1029,8 @@ function trocarModo(valor) {
   pilhaVoltar = [];
   for (const chave of Object.keys(estadoBusca)) delete estadoBusca[chave];
   toast(valor === "/orm"
-    ? "CRUD apontando para as rotas ORM da Etapa 2 (/orm)."
-    : "CRUD apontando para as rotas em SQL puro da Etapa 1.", "ok");
+    ? "CRUD nas rotas ORM da Etapa 2 (/orm)."
+    : "CRUD nas rotas em SQL puro da Etapa 1.", "ok");
   montarTabs();
 }
 
@@ -1041,10 +1040,10 @@ async function verificarApi() {
   const status = document.getElementById("api-status");
   try {
     await chamarApi("GET", "/");
-    status.textContent = "✅ conectado à API (porta 8000)";
+    status.textContent = "conectado à API na porta 8000";
     status.className = "ok";
   } catch (e) {
-    status.textContent = "❌ API fora do ar — suba o backend com: uvicorn main:app --reload";
+    status.textContent = "API fora do ar. Suba o backend com uvicorn main:app --reload";
     status.className = "erro";
   }
 }

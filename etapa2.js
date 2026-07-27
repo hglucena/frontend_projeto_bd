@@ -77,28 +77,28 @@ function montarAbaViews() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "As três views são objetos do banco, definidas em 08_etapa2_views.sql. " +
-    "A API só executa SELECT sobre elas."));
+    "As views são objetos do banco, criadas em 08_etapa2_views.sql. " +
+    "A API só faz SELECT sobre elas."));
 
   const cartoes = [
     cartaoDeConsulta({
-      titulo: "🛏️ Pacientes internados (vw_pacientes_internados)",
-      ajuda: "Critério: a internação mais recente do paciente está sem data de saída. " +
-             "Quem teve alta na última internação não aparece, mesmo tendo internação antiga em aberto.",
+      titulo: "Pacientes internados (vw_pacientes_internados)",
+      ajuda: "Entra quem tem a internação mais recente sem data de saída. Uma alta na última " +
+             "internação tira o paciente da lista, mesmo que exista uma internação antiga em aberto.",
       caminho: "/etapa2/views/pacientes-internados",
       colunas: ["nome", "cpf", "grupo_sanguineo", "unidade", "data_hora_entrada", "motivo"],
       rotulos: { data_hora_entrada: "entrada", cpf: "CPF" },
     }),
     cartaoDeConsulta({
-      titulo: "🎓 Residentes sem supervisor doutor (vw_residentes_sem_supervisor)",
+      titulo: "Residentes sem supervisor doutor (vw_residentes_sem_supervisor)",
       ajuda: "Plantões cujo preceptor responsável não tem titulação de doutor.",
       caminho: "/etapa2/views/residentes-sem-supervisor",
       colunas: ["residente", "ano_residencia", "unidade", "dia_semana", "turno", "preceptor", "titulacao", "motivo"],
     }),
     cartaoDeConsulta({
-      titulo: "📈 Estatísticas mensais (vw_estatisticas_atendimentos_mensal)",
-      ajuda: "Agregação por mês e unidade. Atendimentos sem unidade registrada ficam de fora, " +
-             "o que inclui os criados pelas rotas em SQL puro da Etapa 1.",
+      titulo: "Estatísticas mensais (vw_estatisticas_atendimentos_mensal)",
+      ajuda: "Agrupado por mês e unidade. Atendimento sem unidade fica de fora, caso dos que " +
+             "vieram pelas rotas em SQL puro da Etapa 1.",
       caminho: "/etapa2/views/estatisticas-mensais",
       colunas: ["mes", "unidade", "total_atendimentos", "media_duracao_minutos",
                 "menor_duracao", "maior_duracao", "procedimentos_mais_comuns"],
@@ -119,8 +119,8 @@ function montarAbaProcedures() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "As duas rotinas abaixo gravam no banco dentro de uma transação. Se qualquer " +
-    "passo falhar, nada é gravado."));
+    "As duas rotinas abaixo gravam dentro de uma transação só. Se um passo falhar, " +
+    "o banco desfaz os anteriores."));
 
   /* --- sp_registrar_atendimento_completo --- */
 
@@ -180,7 +180,7 @@ function montarAbaProcedures() {
       procedimentos.push(item);
     }
     if (procedimentos.length === 0) {
-      toast("Escolha pelo menos um procedimento. A procedure recusa lista vazia.", "erro");
+      toast("Escolha ao menos um procedimento: a procedure recusa lista vazia.", "erro");
       return;
     }
 
@@ -196,16 +196,16 @@ function montarAbaProcedures() {
       toast(e.message, "erro");
       areaResultado.innerHTML = "";
       areaResultado.append(el("p", { class: "vazio" },
-        "A transação foi revertida por inteiro: " + e.message));
+        "Transação revertida: " + e.message));
     }
   });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "🧾 Registrar atendimento completo (sp_registrar_atendimento_completo)"),
+    el("h2", {}, "Registrar atendimento completo (sp_registrar_atendimento_completo)"),
     el("p", { class: "ajuda" },
-      "O atendimento e a lista de procedimentos vão juntos, como um array JSON. " +
-      "Para ver a reversão em ação, deixe um procedimento repetido na lista: a chave " +
-      "primária composta recusa, e o atendimento não é gravado."),
+      "O atendimento e a lista de procedimentos vão numa chamada só, com os procedimentos " +
+      "em JSON. Para ver a reversão, repita um procedimento na lista: a chave primária " +
+      "composta recusa e aí nem o atendimento é gravado."),
     formAtendimento,
     el("h2", {}, "Procedimentos deste atendimento"),
     linhasProcedimento,
@@ -266,14 +266,14 @@ function montarAbaProcedures() {
   });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "🗓️ Reajustar escala (sp_reajustar_escala)"),
+    el("h2", {}, "Reajustar escala (sp_reajustar_escala)"),
     el("p", { class: "ajuda" },
-      "Move os plantões do residente de um dia/turno para outro, tudo ou nada. " +
-      "Recusa quando o destino já está ocupado por ele. Com o seed, mover o residente " +
-      "14 de sexta/manhã para quinta/manhã funciona; mover o 12 de quinta/manhã para " +
-      "segunda/manhã é recusado. A coluna versão sobe a cada alteração aceita."),
+      "Move de uma vez todos os plantões do residente de um dia e turno para outro, e " +
+      "recusa se ele já tiver plantão no destino. Com os dados do seed, o residente 14 " +
+      "sai de sexta/manhã para quinta/manhã; o 12 não sai de quinta/manhã para segunda/manhã. " +
+      "A coluna versao sobe a cada movimentação aceita."),
     formReajuste,
-    el("h2", {}, "Escalas agora"),
+    el("h2", {}, "Escalas atuais"),
     escalasApos));
   recarregarEscalas();
 }
@@ -285,8 +285,8 @@ function montarAbaAuditoria() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "Nenhuma rota da API escreve nesta tabela. Toda linha aqui foi gravada pelo " +
-    "trg_audita_atendimento, inclusive as de atendimentos já apagados."));
+    "Tudo aqui foi gravado pelo trigger trg_audita_atendimento, inclusive as linhas de " +
+    "atendimentos que já foram apagados. A API não escreve nesta tabela."));
 
   const camposFiltro = [
     { nome: "id_atendimento", rotulo: "Atendimento (id)", tipo: "number" },
@@ -298,7 +298,7 @@ function montarAbaAuditoria() {
   const formFiltro = el("form", { class: "crud-form" });
   for (const campo of camposFiltro) formFiltro.append(criarCampo(campo));
   formFiltro.append(el("div", { class: "acoes-form" },
-    el("button", { class: "botao", type: "submit" }, "🔍 Buscar"),
+    el("button", { class: "botao", type: "submit" }, "Buscar"),
     el("button", { class: "botao neutro", type: "button", onclick: () => {
       formFiltro.reset();
       formFiltro.querySelectorAll("select").forEach(s => { s.value = ""; });
@@ -344,10 +344,9 @@ function montarAbaAuditoria() {
   formFiltro.addEventListener("submit", (ev) => { ev.preventDefault(); carregar(); });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "🔎 Consultar auditoria de atendimentos"),
+    el("h2", {}, "Consultar auditoria de atendimentos"),
     el("p", { class: "ajuda" },
-      "Para gerar linhas novas: crie, edite ou apague um atendimento na aba " +
-      "Atendimentos e volte para cá."),
+      "Crie, edite ou apague um atendimento na aba Atendimentos para ver linhas novas aqui."),
     formFiltro));
   raiz.append(el("div", { class: "card" }, el("h2", {}, "Histórico"), area));
   carregar();
@@ -360,28 +359,27 @@ function montarAbaConsultasOrm() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "Todas as consultas desta aba são montadas com a DSL do SQLAlchemy, sem SQL " +
-    "em string. As versões equivalentes em SQL estão no 10_etapa2_verificacao.sql " +
-    "e no 04_analiticas.sql, para conferir se o resultado bate."));
+    "As consultas desta aba são montadas com a DSL do SQLAlchemy. O SQL equivalente " +
+    "está em 10_etapa2_verificacao.sql e em 04_analiticas.sql, para comparar os resultados."));
 
   const cartoes = [
     cartaoDeConsulta({
-      titulo: "⏱️ Tempo médio de espera por unidade (sp_calcular_tempo_medio_espera)",
+      titulo: "Tempo médio de espera por unidade (sp_calcular_tempo_medio_espera)",
       ajuda: "Intervalo entre a chegada do paciente e o início do primeiro procedimento.",
       caminho: "/etapa2/procedures/tempo-medio-espera",
       colunas: ["nome_unidade", "atendimentos_considerados", "espera_media_minutos"],
       rotulos: { nome_unidade: "unidade", espera_media_minutos: "espera média (min)" },
     }),
     cartaoDeConsulta({
-      titulo: "🔴 Preceptores de pacientes flamenguistas",
+      titulo: "Preceptores de pacientes flamenguistas",
       ajuda: "Preceptores que supervisionaram residentes no atendimento a pacientes com is_flamengo verdadeiro.",
       caminho: "/etapa2/consultas/preceptores-flamenguistas",
       colunas: ["preceptor", "titulacao", "especialidade",
                 "atendimentos_com_flamenguista", "residentes_supervisionados"],
     }),
     cartaoDeConsulta({
-      titulo: "⚠️ Percentual de procedimentos de alto risco por residente",
-      ajuda: "Contado por registro de procedimento realizado, não pela coluna quantidade. " +
+      titulo: "Percentual de procedimentos de alto risco por residente",
+      ajuda: "A contagem é por registro de procedimento realizado e ignora a coluna quantidade. " +
              "Residente sem procedimento aparece com 0%.",
       caminho: "/etapa2/consultas/percentual-alto-risco",
       colunas: ["residente", "ano_residencia", "total_procedimentos",
@@ -389,8 +387,8 @@ function montarAbaConsultasOrm() {
       rotulos: { percentual_alto_risco: "percentual (%)" },
     }),
     cartaoDeConsulta({
-      titulo: "🕒 Último atendimento de cada paciente",
-      ajuda: "Resolvido com função de janela e carregamento adiantado dos relacionamentos.",
+      titulo: "Último atendimento de cada paciente",
+      ajuda: "Função de janela para achar o mais recente, com os relacionamentos carregados de uma vez.",
       caminho: "/etapa2/consultas/ultimo-atendimento-por-paciente",
       colunas: ["paciente", "data_hora", "unidade", "residente", "preceptor", "procedimentos"],
       transformar: (itens) => itens.map(i => ({
@@ -411,10 +409,10 @@ function montarAbaConsultasOrm() {
 
   const areaCarregamento = el("div");
   const cartaoCarregamento = el("div", { class: "card" },
-    el("h2", {}, "🐢 Carregamento sob demanda contra adiantado"),
+    el("h2", {}, "Carregamento sob demanda contra adiantado"),
     el("p", { class: "ajuda" },
       "Percorre os atendimentos lendo o nome do paciente das duas formas e conta " +
-      "quantas instruções SQL cada uma provoca. A diferença é o problema N+1."),
+      "quantas instruções SQL cada uma dispara. A diferença é o N+1."),
     el("div", { class: "acoes-form" },
       el("button", { class: "botao", type: "button", onclick: () => medirCarregamento() },
         "Medir agora")),
@@ -441,10 +439,10 @@ function montarAbaConsultasOrm() {
   /* --- as quatro analíticas da Etapa 1, agora em DSL --- */
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "As quatro consultas analíticas da Etapa 1, reescritas em DSL"),
+    el("h2", {}, "As consultas analíticas da Etapa 1, reescritas em DSL"),
     el("p", { class: "ajuda" },
-      "O item 4 da Etapa 2 pede todas as operações da Etapa 1 reimplementadas com " +
-      "ORM, e isso inclui as analíticas, que antes só rodavam pelo psql.")));
+      "O item 4 da Etapa 2 pede as operações da Etapa 1 reimplementadas com ORM. " +
+      "Estas quatro antes só rodavam pelo psql.")));
 
   const analiticas = [
     cartaoDeConsulta({
@@ -461,8 +459,7 @@ function montarAbaConsultasOrm() {
     }),
     cartaoDeConsulta({
       titulo: "3. Plantões por residente em cada unidade (grade semanal)",
-      ajuda: "A escala não guarda data. Esta leitura conta as posições fixas da grade; " +
-             "a outra projeta a grade nos dias do mês atual.",
+      ajuda: "A escala guarda dia da semana e turno, sem data. Aqui a contagem é das posições da grade.",
       caminho: "/orm/analiticas/plantoes-por-unidade",
       colunas: ["unidade", "residente", "plantoes"],
     }),
@@ -474,7 +471,7 @@ function montarAbaConsultasOrm() {
     }),
     cartaoDeConsulta({
       titulo: "4. Pacientes que nunca fizeram procedimento de risco ALTO",
-      ajuda: "NOT EXISTS, e não NOT IN: com NOT IN, um NULL na subconsulta zera o resultado sem erro.",
+      ajuda: "Feita com NOT EXISTS. Com NOT IN, um NULL na subconsulta zeraria o resultado sem dar erro.",
       caminho: "/orm/analiticas/pacientes-sem-alto-risco",
       colunas: ["nome", "grupo_sanguineo", "numero_convenio"],
     }),
@@ -493,34 +490,33 @@ function montarAbaConcorrencia() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "A simulação abre duas sessões de verdade, em threads separadas, e as faz " +
-    "disputar a mesma escala. O que for criado durante o teste é apagado no fim, " +
-    "então o banco volta ao estado anterior."));
+    "A simulação abre duas sessões em threads separadas e faz as duas disputarem a " +
+    "mesma escala. No fim ela apaga o que criou, e o banco volta como estava."));
 
   const area = el("div");
 
   const botao = el("button", { class: "botao salvar", type: "button" },
-    "Rodar os três cenários");
+    "Rodar os cenários");
 
   botao.addEventListener("click", async () => {
     botao.disabled = true;
     area.innerHTML = "";
     area.append(el("p", { class: "vazio" },
-      "Executando. Os cenários envolvem espera por bloqueio, então leva alguns segundos..."));
+      "Executando. Os cenários esperam por bloqueio, então isso leva alguns segundos."));
     try {
       const r = await chamarApi("POST", "/etapa2/concorrencia/simular");
       area.innerHTML = "";
       for (const cenario of r.cenarios) {
         const log = tabelaSimples(cenario.log, ["instante", "ator", "mensagem"]);
         area.append(el("div", { class: "card" },
-          el("h2", {}, (cenario.conflito_evitado ? "✅ " : "❌ ") + cenario.cenario),
+          el("h2", {}, cenario.cenario + (cenario.conflito_evitado ? "" : " (conflito não evitado)")),
           el("p", { class: "ajuda" }, cenario.descricao),
           log,
           el("p", { class: "ajuda" }, "Desfecho: " + cenario.desfecho)));
       }
       const todosOk = r.cenarios.every(c => c.conflito_evitado);
-      toast(todosOk ? "Os três cenários terminaram como esperado."
-                    : "Algum cenário não terminou como esperado; ver os logs.",
+      toast(todosOk ? "Todos os cenários terminaram como esperado."
+                    : "Algum cenário não terminou como esperado. Confira os logs.",
             todosOk ? "ok" : "erro");
     } catch (e) {
       area.innerHTML = "";
@@ -532,13 +528,13 @@ function montarAbaConcorrencia() {
   });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "🔀 Duas transações disputando a mesma escala"),
+    el("h2", {}, "Duas transações disputando a mesma escala"),
     el("p", { class: "ajuda" },
-      "Cenário 1 conta apenas com as restrições do banco: as duas sessões consultam, " +
-      "nenhuma vê conflito, e a segunda falha na gravação. Cenário 2 usa bloqueio " +
-      "pessimista (SELECT ... FOR UPDATE) e a segunda sessão desiste com mensagem de " +
-      "negócio. Cenário 3 usa bloqueio otimista pela coluna versao e a segunda recebe " +
-      "StaleDataError. A mesma simulação roda no terminal com python demo_concorrencia.py."),
+      "No cenário 1 só as restrições do banco seguram: as duas sessões consultam, nenhuma " +
+      "vê conflito e a segunda quebra na gravação. O cenário 2 usa bloqueio pessimista " +
+      "(SELECT ... FOR UPDATE) e a segunda sessão desiste com mensagem de negócio. O cenário 3 " +
+      "usa bloqueio otimista pela coluna versao e a segunda recebe StaleDataError. " +
+      "A mesma simulação roda no terminal com python demo_concorrencia.py."),
     el("div", { class: "acoes-form" }, botao)));
   raiz.append(area);
 }
@@ -555,9 +551,8 @@ function registrarRecursosEtapa2(RECURSOS) {
     chave: ["id_internacao"],
     podeEditar: true,
     podeExcluir: true,
-    aviso: "Um paciente não pode ter duas internações abertas ao mesmo tempo. " +
-           "Quem garante isso é um índice parcial no banco, não a aplicação. " +
-           "Para dar alta, abra o perfil da internação.",
+    aviso: "Um índice parcial no banco impede que o mesmo paciente tenha duas internações " +
+           "abertas ao mesmo tempo. A alta é registrada pelo perfil da internação.",
     campos: [
       { nome: "id_paciente", rotulo: "Paciente", tipo: "lookup", recurso: "pacientes", decorado: "paciente",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
@@ -587,7 +582,7 @@ function registrarRecursosEtapa2(RECURSOS) {
         opcoes: [{ valor: "true", rotulo: "sim" }] },
     ],
     perfil: {
-      rotuloItem: i => `🛏️ Internação nº ${i.id_internacao}`,
+      rotuloItem: i => `Internação nº ${i.id_internacao}`,
       relacionados: [],
       acoesExtra: (item) => {
         if (item.data_hora_saida) return [];
@@ -598,14 +593,14 @@ function registrarRecursosEtapa2(RECURSOS) {
             toast("Alta registrada. O paciente sai da view de internados.", "ok");
             ativarAba("internacoes");
           } catch (e) { toast(e.message, "erro"); }
-        } }, "🚪 Dar alta")];
+        } }, "Dar alta")];
       },
     },
   };
 
-  RECURSOS["views"] = { titulo: "📋 Views", montar: montarAbaViews };
-  RECURSOS["procedures"] = { titulo: "⚙️ Procedures", montar: montarAbaProcedures };
-  RECURSOS["auditoria"] = { titulo: "📜 Auditoria", montar: montarAbaAuditoria };
-  RECURSOS["consultas-orm"] = { titulo: "🔬 Consultas ORM", montar: montarAbaConsultasOrm };
-  RECURSOS["concorrencia"] = { titulo: "🔀 Concorrência", montar: montarAbaConcorrencia };
+  RECURSOS["views"] = { titulo: "Views", montar: montarAbaViews };
+  RECURSOS["procedures"] = { titulo: "Procedures", montar: montarAbaProcedures };
+  RECURSOS["auditoria"] = { titulo: "Auditoria", montar: montarAbaAuditoria };
+  RECURSOS["consultas-orm"] = { titulo: "Consultas ORM", montar: montarAbaConsultasOrm };
+  RECURSOS["concorrencia"] = { titulo: "Concorrência", montar: montarAbaConcorrencia };
 }
