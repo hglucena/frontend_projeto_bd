@@ -75,27 +75,25 @@ function montarAbaViews() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "As views são objetos do banco, criadas em 08_etapa2_views.sql. " +
-    "A API só faz SELECT sobre elas."));
+    "Painel de acompanhamento em tempo real das unidades hospitalares e corpo médico."));
 
   const cartoes = [
     cartaoDeConsulta({
-      titulo: "Pacientes internados (vw_pacientes_internados)",
-      ajuda: "Entra quem tem a internação mais recente sem data de saída. Uma alta na última " +
-             "internação tira o paciente da lista, mesmo que exista uma internação antiga em aberto.",
+      titulo: "Pacientes Atualmente Internados",
+      ajuda: "Lista pacientes com internação ativa. Pacientes que receberam alta são removidos automaticamente.",
       caminho: "/pacientes/internados",
       colunas: ["nome", "cpf", "grupo_sanguineo", "unidade", "data_hora_entrada", "motivo"],
       rotulos: { data_hora_entrada: "entrada", cpf: "CPF" },
     }),
     cartaoDeConsulta({
-      titulo: "Residentes sem supervisor doutor (vw_residentes_sem_supervisor)",
-      ajuda: "Plantões cujo preceptor responsável não tem titulação de doutor.",
+      titulo: "Plantões com Supervisão Pendente ou Não-Doutor",
+      ajuda: "Identifica plantões onde o preceptor responsável não possui titulação de doutorado.",
       caminho: "/residentes/sem-supervisor-doutor",
       colunas: ["residente", "ano_residencia", "unidade", "dia_semana", "turno", "preceptor", "titulacao", "motivo"],
     }),
     cartaoDeConsulta({
-      titulo: "Estatísticas mensais (vw_estatisticas_atendimentos_mensal)",
-      ajuda: "Agrupado por mês e unidade. Registros antigos sem unidade ficam de fora.",
+      titulo: "Relatório Mensal de Produtividade por Unidade",
+      ajuda: "Estatísticas agregadas por mês e unidade hospitalar.",
       caminho: "/atendimentos/estatisticas-mensais",
       colunas: ["mes", "unidade", "total_atendimentos", "media_duracao_minutos",
                 "menor_duracao", "maior_duracao", "procedimentos_mais_comuns"],
@@ -116,8 +114,7 @@ function montarAbaProcedures() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "As duas rotinas abaixo gravam dentro de uma transação só. Se um passo falhar, " +
-    "o banco desfaz os anteriores."));
+    "Registro unificado de prontuário e gestão de escalas de plantão com garantia de consistência de dados."));
 
   /* --- sp_registrar_atendimento_completo --- */
 
@@ -138,7 +135,7 @@ function montarAbaProcedures() {
   for (const campo of camposAtendimento) formAtendimento.append(criarCampo(campo));
 
   /* Lista dinâmica de procedimentos. A procedure exige pelo menos um. */
-  const linhasProcedimento = el("div");
+  const linhasProcedimento = el("div", { style: "grid-column: 1 / -1;" });
   const camposProcedimento = [
     { nome: "id_procedimento", rotulo: "Procedimento", tipo: "lookup", recurso: "procedimentos",
       rotuloOpcao: p => `${p.id_procedimento} — ${p.nome}`, valorOpcao: p => p.id_procedimento },
@@ -158,12 +155,19 @@ function montarAbaProcedures() {
   }
   acrescentarLinha();
 
-  const areaResultado = el("div");
+  const areaResultado = el("div", { style: "grid-column: 1 / -1; margin-top: 12px;" });
 
-  formAtendimento.append(el("div", { class: "acoes-form" },
-    el("button", { class: "botao salvar", type: "submit" }, "Registrar tudo numa transação"),
-    el("button", { class: "botao", type: "button", onclick: acrescentarLinha },
-      "+ Outro procedimento")));
+  /* Adiciona a seção de procedimentos e botões na ordem natural do formulário */
+  formAtendimento.append(
+    el("div", { style: "grid-column: 1 / -1; margin-top: 16px; margin-bottom: 6px;" },
+      el("h3", { style: "font-size: 1rem; color: var(--azul-escuro); font-weight: 600;" }, "Procedimentos deste atendimento")),
+    linhasProcedimento,
+    el("div", { style: "grid-column: 1 / -1; margin-bottom: 12px;" },
+      el("button", { class: "botao", type: "button", onclick: acrescentarLinha },
+        "+ Adicionar Procedimento")),
+    el("div", { class: "acoes-form", style: "grid-column: 1 / -1; border-top: 1px solid var(--borda); padding-top: 16px;" },
+      el("button", { class: "botao salvar", type: "submit" }, "Finalizar e Registrar Atendimento"))
+  );
 
   formAtendimento.addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -177,7 +181,7 @@ function montarAbaProcedures() {
       procedimentos.push(item);
     }
     if (procedimentos.length === 0) {
-      toast("Escolha ao menos um procedimento: a procedure recusa lista vazia.", "erro");
+      toast("Selecione ao menos um procedimento para o atendimento.", "erro");
       return;
     }
 
@@ -193,19 +197,15 @@ function montarAbaProcedures() {
       toast(e.message, "erro");
       areaResultado.innerHTML = "";
       areaResultado.append(el("p", { class: "vazio" },
-        "Transação revertida: " + e.message));
+        "Operação não concluída: " + e.message));
     }
   });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "Registrar atendimento completo (sp_registrar_atendimento_completo)"),
+    el("h2", {}, "Admissão e Prontuário de Atendimento Integrado"),
     el("p", { class: "ajuda" },
-      "O atendimento e a lista de procedimentos vão numa chamada só, com os procedimentos " +
-      "em JSON. Para ver a reversão, repita um procedimento na lista: a chave primária " +
-      "composta recusa e aí nem o atendimento é gravado."),
+      "Cadastre o atendimento e os procedimentos realizados em um único envio atômico."),
     formAtendimento,
-    el("h2", {}, "Procedimentos deste atendimento"),
-    linhasProcedimento,
     areaResultado));
 
   /* --- sp_reajustar_escala --- */
@@ -222,7 +222,7 @@ function montarAbaProcedures() {
   const formReajuste = el("form", { class: "crud-form" });
   for (const campo of camposReajuste) formReajuste.append(criarCampo(campo));
   formReajuste.append(el("div", { class: "acoes-form" },
-    el("button", { class: "botao salvar", type: "submit" }, "Reajustar")));
+    el("button", { class: "botao salvar", type: "submit" }, "Reajustar Escala")));
 
   const escalasApos = el("div");
 
@@ -263,14 +263,11 @@ function montarAbaProcedures() {
   });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "Reajustar escala (sp_reajustar_escala)"),
+    el("h2", {}, "Reajuste em Lote da Escala Médica"),
     el("p", { class: "ajuda" },
-      "Move de uma vez todos os plantões do residente de um dia e turno para outro, e " +
-      "recusa se ele já tiver plantão no destino. Com os dados do seed, o residente 14 " +
-      "sai de sexta/manhã para quinta/manhã; o 12 não sai de quinta/manhã para segunda/manhã. " +
-      "A coluna versao sobe a cada movimentação aceita."),
+      "Mova os plantões de um residente entre dias e turnos com validação de choques de horário."),
     formReajuste,
-    el("h2", {}, "Escalas atuais"),
+    el("h2", {}, "Escalas Atuais"),
     escalasApos));
   recarregarEscalas();
 }
@@ -282,8 +279,7 @@ function montarAbaAuditoria() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "Tudo aqui foi gravado pelo trigger trg_audita_atendimento, inclusive as linhas de " +
-    "atendimentos que já foram apagados. A API não escreve nesta tabela."));
+    "Trilha de segurança e auditoria automatizada de alterações de prontuários."));
 
   const camposFiltro = [
     { nome: "id_atendimento", rotulo: "Atendimento (id)", tipo: "number" },
@@ -304,12 +300,9 @@ function montarAbaAuditoria() {
 
   const area = el("div");
 
-  /* Cada linha mostra o que mudou, comparando os dois JSON campo a campo.
-     Guardar a linha inteira em JSON é o que permite fazer isso sem saber de
-     antemão quais colunas a tabela tem. */
   function diferencas(antes, depois) {
-    if (!antes) return "linha criada";
-    if (!depois) return "linha removida";
+    if (!antes) return "registro criado";
+    if (!depois) return "registro removido";
     const mudancas = [];
     for (const campo of Object.keys(depois)) {
       if (String(antes[campo]) !== String(depois[campo])) {
@@ -341,11 +334,11 @@ function montarAbaAuditoria() {
   formFiltro.addEventListener("submit", (ev) => { ev.preventDefault(); carregar(); });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "Consultar auditoria de atendimentos"),
+    el("h2", {}, "Consultar Trilha de Auditoria"),
     el("p", { class: "ajuda" },
-      "Crie, edite ou apague um atendimento na aba Atendimentos para ver linhas novas aqui."),
+      "Exibe alterações registradas automaticamente em tempo real durante modificações de atendimento."),
     formFiltro));
-  raiz.append(el("div", { class: "card" }, el("h2", {}, "Histórico"), area));
+  raiz.append(el("div", { class: "card" }, el("h2", {}, "Histórico de Registros"), area));
   carregar();
 }
 
@@ -356,36 +349,34 @@ function montarAbaConsultasOrm() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "As consultas desta aba são montadas com a DSL do SQLAlchemy. O SQL equivalente " +
-    "está em 10_etapa2_verificacao.sql e em 04_analiticas.sql, para comparar os resultados."));
+    "Métricas operacionais e indicadores de desempenho hospitalar."));
 
   const cartoes = [
     cartaoDeConsulta({
-      titulo: "Tempo médio de espera por unidade (sp_calcular_tempo_medio_espera)",
+      titulo: "Tempo Médio de Espera por Unidade",
       ajuda: "Intervalo entre a chegada do paciente e o início do primeiro procedimento.",
       caminho: "/atendimentos/tempo-medio-espera",
       colunas: ["nome_unidade", "atendimentos_considerados", "espera_media_minutos"],
       rotulos: { nome_unidade: "unidade", espera_media_minutos: "espera média (min)" },
     }),
     cartaoDeConsulta({
-      titulo: "Preceptores de pacientes flamenguistas",
-      ajuda: "Preceptores que supervisionaram residentes no atendimento a pacientes com is_flamengo verdadeiro.",
+      titulo: "Supervisão Médica a Pacientes Flamenguistas",
+      ajuda: "Preceptores que supervisionaram residentes em atendimentos a pacientes torcedores do Flamengo.",
       caminho: "/preceptores/supervisionados-flamenguistas",
       colunas: ["preceptor", "titulacao", "especialidade",
                 "atendimentos_com_flamenguista", "residentes_supervisionados"],
     }),
     cartaoDeConsulta({
-      titulo: "Percentual de procedimentos de alto risco por residente",
-      ajuda: "A contagem é por registro de procedimento realizado e ignora a coluna quantidade. " +
-             "Residente sem procedimento aparece com 0%.",
+      titulo: "Índice de Procedimentos de Alto Risco por Residente",
+      ajuda: "Proporção de procedimentos de risco ALTO executados por médico residente.",
       caminho: "/residentes/percentual-alto-risco",
       colunas: ["residente", "ano_residencia", "total_procedimentos",
                 "procedimentos_alto_risco", "percentual_alto_risco"],
       rotulos: { percentual_alto_risco: "percentual (%)" },
     }),
     cartaoDeConsulta({
-      titulo: "Último atendimento de cada paciente",
-      ajuda: "Função de janela para achar o mais recente, com os relacionamentos carregados de uma vez.",
+      titulo: "Último Atendimento Registrado por Paciente",
+      ajuda: "Histórico consolidado do atendimento mais recente de cada paciente.",
       caminho: "/pacientes/ultimo-atendimento",
       colunas: ["paciente", "data_hora", "unidade", "residente", "preceptor", "procedimentos"],
       transformar: (itens) => itens.map(i => ({
@@ -406,13 +397,12 @@ function montarAbaConsultasOrm() {
 
   const areaCarregamento = el("div");
   const cartaoCarregamento = el("div", { class: "card" },
-    el("h2", {}, "Carregamento sob demanda contra adiantado"),
+    el("h2", {}, "Diagnóstico de Performance de Consultas (Lazy vs Eager Loading)"),
     el("p", { class: "ajuda" },
-      "Percorre os atendimentos lendo o nome do paciente das duas formas e conta " +
-      "quantas instruções SQL cada uma dispara. A diferença é o N+1."),
+      "Mede o número de consultas ao banco ao buscar atendimentos com e sem carregamento adiantado."),
     el("div", { class: "acoes-form" },
       el("button", { class: "botao", type: "button", onclick: () => medirCarregamento() },
-        "Medir agora")),
+        "Executar Diagnóstico")),
     areaCarregamento);
 
   async function medirCarregamento() {
@@ -436,39 +426,38 @@ function montarAbaConsultasOrm() {
   /* --- as quatro analíticas da Etapa 1, agora em DSL --- */
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "As consultas analíticas da Etapa 1, reescritas em DSL"),
+    el("h2", {}, "Indicadores Gerenciais Avançados"),
     el("p", { class: "ajuda" },
-      "O item 4 da Etapa 2 pede as operações da Etapa 1 reimplementadas com ORM. " +
-      "Estas quatro antes só rodavam pelo psql.")));
+      "Relatórios gerenciais consolidados do sistema hospitalar.")));
 
   const analiticas = [
     cartaoDeConsulta({
-      titulo: "1. Ranking de residentes por atendimentos",
-      ajuda: "Junção externa: residente sem atendimento aparece com total zero.",
+      titulo: "1. Ranking de Residentes por Volume de Atendimentos",
+      ajuda: "Total de atendimentos por residente.",
       caminho: "/analiticas/ranking-residentes",
       colunas: ["nome", "ano_residencia", "total_atendimentos"],
     }),
     cartaoDeConsulta({
-      titulo: "2. Preceptores com mais de 5 atendimentos em julho de 2026",
-      ajuda: "WHERE filtra o mês antes de agrupar; HAVING filtra a contagem depois.",
+      titulo: "2. Preceptores com Alta Produtividade em Julho/2026",
+      ajuda: "Preceptores que supervisionaram mais de 5 atendimentos no mês.",
       caminho: "/analiticas/preceptores-por-mes?mes=2026-07-01&minimo=5",
       colunas: ["nome", "titulacao", "total_supervisionados"],
     }),
     cartaoDeConsulta({
-      titulo: "3. Plantões por residente em cada unidade (grade semanal)",
-      ajuda: "A escala guarda dia da semana e turno, sem data. Aqui a contagem é das posições da grade.",
+      titulo: "3. Ocupação de Plantões por Unidade (Grade Semanal)",
+      ajuda: "Distribuição semanal de residentes por unidade hospitalar.",
       caminho: "/analiticas/plantoes-por-unidade",
       colunas: ["unidade", "residente", "plantoes"],
     }),
     cartaoDeConsulta({
-      titulo: "3b. Plantões projetados no mês corrente",
-      ajuda: "Mesma grade, multiplicada pelas ocorrências de cada dia da semana no mês.",
+      titulo: "3b. Projeção Mensal de Plantões",
+      ajuda: "Projeção total de plantões no mês corrente.",
       caminho: "/analiticas/plantoes-por-unidade?projetar_no_mes=true",
       colunas: ["unidade", "residente", "plantoes"],
     }),
     cartaoDeConsulta({
-      titulo: "4. Pacientes que nunca fizeram procedimento de risco ALTO",
-      ajuda: "Feita com NOT EXISTS. Com NOT IN, um NULL na subconsulta zeraria o resultado sem dar erro.",
+      titulo: "4. Pacientes Sem Histórico de Procedimentos de Alto Risco",
+      ajuda: "Lista pacientes que nunca realizaram procedimentos classificados como risco alto.",
       caminho: "/analiticas/pacientes-sem-alto-risco",
       colunas: ["nome", "grupo_sanguineo", "numero_convenio"],
     }),
@@ -487,33 +476,32 @@ function montarAbaConcorrencia() {
   raiz.innerHTML = "";
 
   raiz.append(el("div", { class: "aviso" },
-    "A simulação abre duas sessões em threads separadas e faz as duas disputarem a " +
-    "mesma escala. No fim ela apaga o que criou, e o banco volta como estava."));
+    "Simulação de acessos simultâneos e disputa por escalas médicas em tempo real."));
 
   const area = el("div");
 
   const botao = el("button", { class: "botao salvar", type: "button" },
-    "Rodar os cenários");
+    "Iniciar Teste de Estresse");
 
   botao.addEventListener("click", async () => {
     botao.disabled = true;
     area.innerHTML = "";
     area.append(el("p", { class: "vazio" },
-      "Executando. Os cenários esperam por bloqueio, então isso leva alguns segundos."));
+      "Simulando acessos concorrentes em paralelo. Por favor, aguarde alguns segundos..."));
     try {
       const r = await chamarApi("POST", "/concorrencia/simular");
       area.innerHTML = "";
       for (const cenario of r.cenarios) {
         const log = tabelaSimples(cenario.log, ["instante", "ator", "mensagem"]);
         area.append(el("div", { class: "card" },
-          el("h2", {}, cenario.cenario + (cenario.conflito_evitado ? "" : " (conflito não evitado)")),
+          el("h2", {}, cenario.cenario + (cenario.conflito_evitado ? "" : " (conflito detectado)")),
           el("p", { class: "ajuda" }, cenario.descricao),
           log,
-          el("p", { class: "ajuda" }, "Desfecho: " + cenario.desfecho)));
+          el("p", { class: "ajuda" }, "Resultado: " + cenario.desfecho)));
       }
       const todosOk = r.cenarios.every(c => c.conflito_evitado);
-      toast(todosOk ? "Todos os cenários terminaram como esperado."
-                    : "Algum cenário não terminou como esperado. Confira os logs.",
+      toast(todosOk ? "Todos os cenários de concorrência foram gerenciados com sucesso."
+                    : "Conflito de concorrência detectado.",
             todosOk ? "ok" : "erro");
     } catch (e) {
       area.innerHTML = "";
@@ -525,16 +513,13 @@ function montarAbaConcorrencia() {
   });
 
   raiz.append(el("div", { class: "card" },
-    el("h2", {}, "Duas transações disputando a mesma escala"),
+    el("h2", {}, "Simulação de Concorrência e Bloqueios em Tempo Real"),
     el("p", { class: "ajuda" },
-      "No cenário 1 só as restrições do banco seguram: as duas sessões consultam, nenhuma " +
-      "vê conflito e a segunda quebra na gravação. O cenário 2 usa bloqueio pessimista " +
-      "(SELECT ... FOR UPDATE) e a segunda sessão desiste com mensagem de negócio. O cenário 3 " +
-      "usa bloqueio otimista pela coluna versao e a segunda recebe StaleDataError. " +
-      "A mesma simulação roda no terminal com python demo_concorrencia.py."),
+      "Simula duas sessões médicas tentando alterar a mesma escala simultaneamente para demonstrar bloqueios otimistas e pessimistas."),
     el("div", { class: "acoes-form" }, botao)));
   raiz.append(area);
 }
+
 
 /* ---------- registro das abas ---------- */
 
@@ -593,9 +578,9 @@ function registrarRecursosEtapa2(RECURSOS) {
     },
   };
 
-  RECURSOS["views"] = { titulo: "Views", montar: montarAbaViews };
-  RECURSOS["procedures"] = { titulo: "Procedures", montar: montarAbaProcedures };
+  RECURSOS["views"] = { titulo: "Painel Clínico", montar: montarAbaViews };
+  RECURSOS["procedures"] = { titulo: "Novo Atendimento", montar: montarAbaProcedures };
   RECURSOS["auditoria"] = { titulo: "Auditoria", montar: montarAbaAuditoria };
-  RECURSOS["consultas-orm"] = { titulo: "Consultas ORM", montar: montarAbaConsultasOrm };
-  RECURSOS["concorrencia"] = { titulo: "Concorrência", montar: montarAbaConcorrencia };
+  RECURSOS["consultas-orm"] = { titulo: "Indicadores", montar: montarAbaConsultasOrm };
+  RECURSOS["concorrencia"] = { titulo: "Simulação de Concorrência", montar: montarAbaConcorrencia };
 }

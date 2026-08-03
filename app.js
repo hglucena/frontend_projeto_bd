@@ -212,7 +212,7 @@ const RECURSOS = {
     podeExcluir: true,
     podeCadastrar: false,
     aviso: "Novos atendimentos precisam ser criados com ao menos um procedimento. " +
-           "Use a aba Procedures, em Registrar atendimento completo. Esta aba continua " +
+           "Use a aba Novo Atendimento. Esta aba continua " +
            "permitindo consultar, editar e excluir atendimentos existentes.",
     campos: [
       { nome: "data_hora", rotulo: "Data e hora", tipo: "datetime-local", obrigatorio: true },
@@ -635,14 +635,14 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
       ? (permite(cfg, "podeEditar") ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()
       : "Editar " + cfg.titulo.toLowerCase()),
     !podeCadastrar ? el("p", { class: "ajuda" },
-      "Selecione Editar em um atendimento existente. Para criar um novo, use " +
-      "Registrar atendimento completo na aba Procedures.") : null,
+      "Selecione Editar em um atendimento existente. Para criar um novo atendimento completo, use " +
+      "a aba Novo Atendimento.") : null,
     !podeCadastrar ? el("div", { class: "acoes-form" },
       el("button", {
         class: "botao salvar",
         type: "button",
         onclick: () => ativarAba("procedures"),
-      }, "Ir para Registrar atendimento completo")) : null,
+      }, "Ir para Novo Atendimento")) : null,
     form);
   raiz.append(cardCadastro);
 
@@ -672,7 +672,7 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
       if (idEmEdicao.valor === null) {
         if (!podeCadastrar) {
           throw new Error(
-            "Crie o atendimento pela aba Procedures, em Registrar atendimento completo."
+            "Crie o atendimento pela aba Novo Atendimento."
           );
         }
         await chamarApi("POST", caminhoDe(cfg), dados);
