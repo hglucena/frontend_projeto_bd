@@ -5,19 +5,11 @@
 
 const API = "/api";
 
-/* Modo da API. A mesma tela conversa com as rotas em SQL puro da Etapa 1 ou
-   com as rotas em ORM da Etapa 2, que expõem as mesmas operações sob /orm.
-   O seletor no cabeçalho troca o prefixo em tempo de execução, o que permite
-   comparar as duas implementações sem sair da página. */
-let MODO_API = "";   // "" = Etapa 1 (SQL puro) | "/orm" = Etapa 2 (ORM)
-
-/* Recursos marcados com semModo têm caminho próprio e ignoram a chave. */
+/* Cada recurso aponta diretamente para seu endpoint canônico. */
 function caminhoDe(cfg) {
-  return (cfg.semModo ? "" : MODO_API) + cfg.caminho;
+  return cfg.caminho;
 }
 
-/* Algumas permissões dependem do modo: a Etapa 1 não expõe editar nem excluir
-   preceptor, a Etapa 2 expõe. Por isso o valor pode ser função. */
 function permite(cfg, acao) {
   const valor = cfg[acao];
   return typeof valor === "function" ? valor() : Boolean(valor);
@@ -53,8 +45,7 @@ async function chamarApi(metodo, caminho, corpo) {
 }
 
 function listaCacheada(chaveRecurso) {
-  // A chave inclui o modo: a mesma listagem pode vir da Etapa 1 ou da Etapa 2.
-  const chave = MODO_API + ":" + chaveRecurso;
+  const chave = chaveRecurso;
   if (!cacheListas[chave]) {
     cacheListas[chave] = chamarApi("GET", caminhoDe(RECURSOS[chaveRecurso]))
       .catch(e => { delete cacheListas[chave]; throw e; });
@@ -84,7 +75,9 @@ function montarQuery(filtros) {
 function formatarValor(coluna, valor) {
   if (valor === null || valor === undefined || valor === "") return "—";
   if (typeof valor === "boolean") return valor ? "sim" : "não";
-  if (coluna === "data_hora") return String(valor).slice(0, 16).replace("T", " ");
+  if (["data_hora", "data_hora_inicio", "data_hora_entrada", "data_hora_saida"].includes(coluna)) {
+    return String(valor).slice(0, 16).replace("T", " ");
+  }
   return String(valor);
 }
 
@@ -160,10 +153,8 @@ const RECURSOS = {
     titulo: "Preceptores",
     caminho: "/preceptores/",
     chave: ["id_pessoa"],
-    // A Etapa 1 só oferece criar e listar preceptor. A camada ORM da Etapa 2
-    // completou o CRUD, então os botões aparecem apenas no modo ORM.
-    podeEditar: () => MODO_API === "/orm",
-    podeExcluir: () => MODO_API === "/orm",
+    podeEditar: true,
+    podeExcluir: true,
     campos: [
       ...camposPessoa,
       { nome: "CRM", rotulo: "CRM", tipo: "text", obrigatorio: true },
@@ -219,6 +210,10 @@ const RECURSOS = {
     chave: ["id_atendimento"],
     podeEditar: true,
     podeExcluir: true,
+    podeCadastrar: false,
+    aviso: "Novos atendimentos precisam ser criados com ao menos um procedimento. " +
+           "Use a aba Procedures, em Registrar atendimento completo. Esta aba continua " +
+           "permitindo consultar, editar e excluir atendimentos existentes.",
     campos: [
       { nome: "data_hora", rotulo: "Data e hora", tipo: "datetime-local", obrigatorio: true },
       { nome: "duracao_minutos", rotulo: "Duração (min)", tipo: "number", obrigatorio: true, min: 1 },
@@ -231,11 +226,9 @@ const RECURSOS = {
       { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores", decorado: "preceptor",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa,
         dica: "id do preceptor (seed: 6 a 10)" },
-      // Coluna da Etapa 2. As rotas em SQL puro da Etapa 1 ignoram este campo,
-      // então no modo Etapa 1 a unidade aparece vazia na tabela.
       { nome: "id_unidade", rotulo: "Unidade", tipo: "lookup", recurso: "unidades", decorado: "unidade",
         rotuloOpcao: u => `${u.id_unidade} — ${u.nome}`, valorOpcao: u => u.id_unidade,
-        dica: "gravada só no modo ORM" },
+        dica: "unidade onde ocorreu o atendimento" },
     ],
     colunas: ["id_atendimento", "data_hora", "duracao_minutos", "paciente", "residente", "preceptor", "unidade"],
     decorar: async (itens) => {
@@ -282,8 +275,8 @@ const RECURSOS = {
       { nome: "tempo_medio_minutos", rotulo: "Tempo médio (min)", tipo: "number", obrigatorio: true, min: 1 },
       { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select", opcoes: ["BAIXO", "MEDIO", "ALTO"], obrigatorio: true },
     ],
-    // media_tempo_procedimento é mantida pelo trigger da Etapa 2 e só vem nas
-    // rotas ORM. Não há campo dela no formulário: a aplicação não escreve nessa
+    // media_tempo_procedimento é mantida pelo trigger. Não há campo dela no
+    // formulário: a aplicação não escreve nessa
     // coluna, quem escreve é o banco.
     colunas: ["id_procedimento", "codigo", "nome", "tempo_medio_minutos", "nivel_risco", "media_tempo_procedimento"],
     busca: [
@@ -304,7 +297,7 @@ const RECURSOS = {
     especial: "procRealizado",
     caminho: "/procedimentos-realizados/",
     chave: ["id_atendimento", "id_procedimento"],
-    colunas: ["atendimento", "procedimento", "quantidade", "tempo_real_minutos", "observacao", "faturado"],
+    colunas: ["atendimento", "procedimento", "quantidade", "tempo_real_minutos", "data_hora_inicio", "observacao", "faturado"],
     decorar: async (itens) => {
       const ate = await mapaPorId("atendimentos", "id_atendimento");
       return itens.map(pr => ({
@@ -326,6 +319,8 @@ const RECURSOS = {
         rotuloOpcao: p => `${p.id_procedimento} — ${p.nome}`, valorOpcao: p => p.id_procedimento },
       { nome: "faturado", rotulo: "Faturado", tipo: "select",
         opcoes: [{ valor: "true", rotulo: "sim" }, { valor: "false", rotulo: "não" }] },
+      { nome: "nivel_risco", rotulo: "Nível de risco", tipo: "select",
+        opcoes: ["BAIXO", "MEDIO", "ALTO"] },
     ],
   },
 
@@ -346,8 +341,9 @@ const RECURSOS = {
       { nome: "id_preceptor", rotulo: "Preceptor", tipo: "lookup", recurso: "preceptores", decorado: "preceptor",
         rotuloOpcao: p => `${p.id_pessoa} — ${p.nome}`, valorOpcao: p => p.id_pessoa },
     ],
-    // versao entra no controle de concorrência otimista e só vem nas rotas ORM.
+    // versao entra no controle de concorrência otimista.
     colunas: ["id_escala", "unidade", "dia_semana", "turno", "residente", "preceptor", "versao"],
+    prepararAtualizacao: (dados, item) => ({ ...dados, versao: item.versao }),
     decorar: async (itens) => {
       const [uni, res, pre] = await Promise.all([
         mapaPorId("unidades", "id_unidade"),
@@ -621,29 +617,51 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
   const form = el("form", { class: "crud-form" });
   for (const campo of cfg.campos) form.append(criarCampo(campo));
 
+  const podeCadastrar = cfg.podeCadastrar !== false;
   const idEmEdicao = { valor: null };
-  const botaoSalvar = el("button", { class: "botao salvar", type: "submit" }, "Cadastrar");
+  const itemEmEdicao = { valor: null };
+  const botaoSalvar = el(
+    "button",
+    { class: "botao salvar", type: "submit" },
+    podeCadastrar ? "Cadastrar" : "Salvar alterações",
+  );
   const botaoCancelar = el("button", { class: "botao neutro", type: "button", onclick: cancelarEdicao }, "Cancelar edição");
   botaoCancelar.style.display = "none";
   form.append(el("div", { class: "acoes-form" }, botaoSalvar, botaoCancelar));
+  if (!podeCadastrar) form.style.display = "none";
 
   const cardCadastro = el("div", { class: "card" },
-    el("h2", {}, (cfg.podeEditar ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()),
+    el("h2", {}, podeCadastrar
+      ? (permite(cfg, "podeEditar") ? "Cadastrar / editar " : "Cadastrar ") + cfg.titulo.toLowerCase()
+      : "Editar " + cfg.titulo.toLowerCase()),
+    !podeCadastrar ? el("p", { class: "ajuda" },
+      "Selecione Editar em um atendimento existente. Para criar um novo, use " +
+      "Registrar atendimento completo na aba Procedures.") : null,
+    !podeCadastrar ? el("div", { class: "acoes-form" },
+      el("button", {
+        class: "botao salvar",
+        type: "button",
+        onclick: () => ativarAba("procedures"),
+      }, "Ir para Registrar atendimento completo")) : null,
     form);
   raiz.append(cardCadastro);
 
   function cancelarEdicao() {
     idEmEdicao.valor = null;
+    itemEmEdicao.valor = null;
     form.reset();
-    botaoSalvar.textContent = "Cadastrar";
+    botaoSalvar.textContent = podeCadastrar ? "Cadastrar" : "Salvar alterações";
     botaoCancelar.style.display = "none";
+    if (!podeCadastrar) form.style.display = "none";
   }
 
   function iniciarEdicao(item) {
     idEmEdicao.valor = item[cfg.chave[0]];
+    itemEmEdicao.valor = item;
     preencherFormulario(form, cfg.campos, item);
     botaoSalvar.textContent = "Salvar alterações";
     botaoCancelar.style.display = "";
+    form.style.display = "";
     cardCadastro.scrollIntoView({ behavior: "smooth" });
   }
 
@@ -652,10 +670,18 @@ function montarAbaCrud(chaveRecurso, opcoes = {}) {
     const dados = lerFormulario(form, cfg.campos);
     try {
       if (idEmEdicao.valor === null) {
+        if (!podeCadastrar) {
+          throw new Error(
+            "Crie o atendimento pela aba Procedures, em Registrar atendimento completo."
+          );
+        }
         await chamarApi("POST", caminhoDe(cfg), dados);
         toast(`${cfg.titulo}: registro cadastrado.`, "ok");
       } else {
-        await chamarApi("PUT", caminhoDe(cfg) + idEmEdicao.valor, dados);
+        const corpo = cfg.prepararAtualizacao
+          ? cfg.prepararAtualizacao(dados, itemEmEdicao.valor)
+          : dados;
+        await chamarApi("PUT", caminhoDe(cfg) + idEmEdicao.valor, corpo);
         toast(`${cfg.titulo}: registro atualizado.`, "ok");
       }
       cancelarEdicao();
@@ -808,7 +834,7 @@ async function montarAbaRelatorios() {
 
   try {
     const [dados, residentes] = await Promise.all([
-      chamarApi("GET", MODO_API + "/atendimentos/tempo-medio-por-residente"),
+      chamarApi("GET", "/atendimentos/tempo-medio-por-residente"),
       listaCacheada("residentes"),
     ]);
     const porId = {};
@@ -858,6 +884,7 @@ function montarAbaProcRealizado() {
       rotuloOpcao: p => `${p.id_procedimento} — ${p.nome}`, valorOpcao: p => p.id_procedimento },
     { nome: "quantidade", rotulo: "Quantidade", tipo: "number", obrigatorio: true, min: 1 },
     { nome: "tempo_real_minutos", rotulo: "Tempo real (min)", tipo: "number", obrigatorio: true, min: 1 },
+    { nome: "data_hora_inicio", rotulo: "Início", tipo: "datetime-local" },
     { nome: "observacao", rotulo: "Observação", tipo: "text" },
     { nome: "faturado", rotulo: "Já faturado?", tipo: "checkbox" },
   ];
@@ -927,7 +954,7 @@ function montarAbaProcRealizado() {
     ev.preventDefault();
     try {
       const d = chaves();
-      await chamarApi("POST", MODO_API + "/procedimentos-realizados/", d);
+      await chamarApi("POST", "/procedimentos-realizados/", d);
       toast("Procedimento registrado no atendimento.", "ok");
       mostrar(d);
       await atualizarLista();
@@ -937,7 +964,7 @@ function montarAbaProcRealizado() {
   async function buscar() {
     try {
       const d = chaves();
-      const item = await chamarApi("GET", `${MODO_API}/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
+      const item = await chamarApi("GET", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
       preencherFormulario(form, campos, item);
       mostrar(item);
       toast("Registro encontrado.", "ok");
@@ -948,8 +975,9 @@ function montarAbaProcRealizado() {
     try {
       const d = chaves();
       const corpo = { quantidade: d.quantidade, tempo_real_minutos: d.tempo_real_minutos,
+                      data_hora_inicio: d.data_hora_inicio,
                       observacao: d.observacao, faturado: d.faturado };
-      const item = await chamarApi("PUT", `${MODO_API}/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`, corpo);
+      const item = await chamarApi("PUT", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`, corpo);
       mostrar(item);
       toast("Registro atualizado.", "ok");
       await atualizarLista();
@@ -960,7 +988,7 @@ function montarAbaProcRealizado() {
     try {
       const d = chaves();
       if (!confirm("Excluir este procedimento realizado?")) return;
-      await chamarApi("DELETE", `${MODO_API}/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
+      await chamarApi("DELETE", `/procedimentos-realizados/${d.id_atendimento}/${d.id_procedimento}`);
       resultado.innerHTML = "";
       toast("Registro excluído.", "ok");
       await atualizarLista();
@@ -971,7 +999,8 @@ function montarAbaProcRealizado() {
     resultado.innerHTML = "";
     const tabela = el("table");
     const cab = el("tr");
-    const cols = ["id_atendimento", "id_procedimento", "quantidade", "tempo_real_minutos", "observacao", "faturado"];
+    const cols = ["id_atendimento", "id_procedimento", "quantidade", "tempo_real_minutos",
+                  "data_hora_inicio", "observacao", "faturado"];
     for (const c of cols) cab.append(el("th", {}, c));
     tabela.append(cab);
     const linha = el("tr");
@@ -999,7 +1028,7 @@ function montarAbaProcRealizado() {
 
 function montarTabs() {
   const nav = document.getElementById("tabs");
-  nav.innerHTML = "";   // a troca de modo reconstrói a barra
+  nav.innerHTML = "";
   for (const [chaveRecurso, cfg] of Object.entries(RECURSOS)) {
     const botao = el("button", { onclick: () => ativarAba(chaveRecurso) }, cfg.titulo);
     botao.dataset.recurso = chaveRecurso;
@@ -1007,31 +1036,6 @@ function montarTabs() {
   }
   const inicial = abaAtiva && RECURSOS[abaAtiva] ? abaAtiva : Object.keys(RECURSOS)[0];
   ativarAba(inicial);
-}
-
-/* ---------- chave entre a implementação da Etapa 1 e a da Etapa 2 ---------- */
-
-function montarSeletorDeModo() {
-  const area = document.getElementById("modo-api");
-  if (!area) return;
-  const seletor = el("select", { onchange: (ev) => trocarModo(ev.target.value) },
-    el("option", { value: "" }, "Etapa 1 (SQL puro)"),
-    el("option", { value: "/orm" }, "Etapa 2 (ORM SQLAlchemy)"));
-  seletor.value = MODO_API;
-  area.append(el("label", {}, "Implementação: ", seletor));
-}
-
-/* Troca o prefixo das rotas de CRUD. As abas da Etapa 2 (views, procedures,
-   auditoria, consultas, concorrência) têm caminho fixo e não são afetadas. */
-function trocarModo(valor) {
-  MODO_API = valor;
-  cacheListas = {};
-  pilhaVoltar = [];
-  for (const chave of Object.keys(estadoBusca)) delete estadoBusca[chave];
-  toast(valor === "/orm"
-    ? "CRUD nas rotas ORM da Etapa 2 (/orm)."
-    : "CRUD nas rotas em SQL puro da Etapa 1.", "ok");
-  montarTabs();
 }
 
 /* ---------- status da API ---------- */
@@ -1054,5 +1058,4 @@ async function verificarApi() {
 if (typeof registrarRecursosEtapa2 === "function") registrarRecursosEtapa2(RECURSOS);
 
 verificarApi();
-montarSeletorDeModo();
 montarTabs();

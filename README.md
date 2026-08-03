@@ -32,32 +32,27 @@ e não há problema de CORS, sem precisar alterar nada no backend.
 | Arquivo      | Papel                                                        |
 |--------------|--------------------------------------------------------------|
 | `index.html` | Página única com navegação por abas                          |
-| `app.js`     | Motor da interface: formulários, tabelas, perfis e abas da Etapa 1 |
-| `etapa2.js`  | Abas da Etapa 2: views, procedures, auditoria, consultas e concorrência |
+| `app.js`     | Motor da interface: formulários, tabelas, perfis e CRUDs canônicos |
+| `etapa2.js`  | Views, procedures, auditoria, consultas e concorrência |
 | `style.css`  | Estilo                                                       |
 | `server.py`  | Servidor estático + proxy `/api` → `localhost:8000`          |
 
 `etapa2.js` é carregado antes do `app.js` e apenas define funções. O `app.js`
-chama `registrarRecursosEtapa2` antes de montar a barra de abas, o que mantém o
-arquivo da Etapa 1 quase intocado.
+chama `registrarRecursosEtapa2` antes de montar a barra de abas.
 
-## Chave entre as duas implementações
+## API canônica
 
-O cabeçalho tem um seletor com duas opções:
+Toda a interface usa diretamente os caminhos canônicos publicados pelo backend.
+Não há seletor de implementação nem prefixos alternativos. Por exemplo:
 
-- **Etapa 1 — SQL puro**: as abas de CRUD falam com as rotas na raiz da API
-- **Etapa 2 — ORM (SQLAlchemy)**: as mesmas abas falam com as rotas sob `/orm`
+- CRUD de pacientes: `/pacientes/`
+- Atendimento completo: `/atendimentos/completo`
+- Reajuste de escala: `/escalas/reajustar`
+- Internações: `/internacoes/`
+- Consultas analíticas: `/analiticas/...`
+- Comparação de carregamento: `/consultas/lazy-vs-eager`
 
-A troca acontece na hora, sem recarregar a página, e serve para comparar as
-duas implementações nas mesmas telas. Duas diferenças ficam visíveis:
-
-- Preceptores só têm os botões de editar e excluir no modo ORM, porque a
-  Etapa 1 não expõe essas operações
-- A unidade do atendimento e a versão da escala só são gravadas no modo ORM;
-  no modo Etapa 1 essas colunas aparecem vazias
-
-As abas próprias da Etapa 2 têm caminho fixo e não acompanham a chave, já que
-essas funcionalidades só existem na Etapa 2.
+O servidor local continua encaminhando `/api/*` para esses caminhos no backend.
 
 ## Abas
 
@@ -67,6 +62,11 @@ Pacientes, Preceptores, Residentes, Atendimentos, Procedimentos, Proc.
 Realizados, Escalas, Relatórios e Unidades. Cada uma tem três áreas, nesta
 ordem: **Consultar** (filtros), **Resultados** (tabela) e **Cadastrar/editar**
 (formulário).
+
+Atendimentos são a exceção: a aba principal consulta e edita registros
+existentes, mas a criação ocorre somente em **Procedures → Registrar atendimento
+completo**, porque todo novo atendimento precisa nascer com ao menos um
+procedimento na mesma transação.
 
 - Consulta com filtros em todas as abas. Os filtros viram query string e a
   busca é feita em SQL no backend.
@@ -101,12 +101,12 @@ recusado, porque ele já tem plantão nesse horário. A tabela abaixo do
 formulário mostra a coluna versão subindo a cada alteração aceita.
 
 **Auditoria** não recebe escrita de nenhuma rota da API. Para gerar linhas
-novas, crie, edite ou apague um atendimento na aba Atendimentos e volte.
+novas, registre um atendimento completo, edite ou apague um atendimento e volte.
 
 **Concorrência** leva alguns segundos, porque o cenário pessimista envolve
 espera real por bloqueio. O que a simulação cria é apagado no fim.
 
-## Demonstração das 6 funcionalidades da Etapa 3
+## Demonstração das 6 funcionalidades principais
 
 Capturas de tela do sistema executando cada atividade exigida (pasta
 `screenshots/`):

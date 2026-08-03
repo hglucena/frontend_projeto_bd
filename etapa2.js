@@ -3,7 +3,7 @@
 
    Carregado antes do app.js. Define registrarRecursosEtapa2, que o app.js
    chama para acrescentar estas abas ao objeto RECURSOS antes de montar a barra
-   de navegação. Assim o arquivo da Etapa 1 fica praticamente intacto.
+   de navegação.
 
    Abas acrescentadas:
 
@@ -14,9 +14,7 @@
      Consultas ORM    as consultas avançadas e as analíticas em DSL
      Concorrência     a simulação de duas transações disputando uma escala
 
-   As rotas destas abas são fixas (/etapa2 e /orm), então elas não acompanham a
-   chave Etapa 1 / Etapa 2 do cabeçalho: essas funcionalidades só existem na
-   Etapa 2.
+   Todas as telas usam os endpoints canônicos da API, sem prefixos alternativos.
    ============================================================ */
 
 const DIAS_ETAPA2 = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"];
@@ -85,21 +83,20 @@ function montarAbaViews() {
       titulo: "Pacientes internados (vw_pacientes_internados)",
       ajuda: "Entra quem tem a internação mais recente sem data de saída. Uma alta na última " +
              "internação tira o paciente da lista, mesmo que exista uma internação antiga em aberto.",
-      caminho: "/etapa2/views/pacientes-internados",
+      caminho: "/pacientes/internados",
       colunas: ["nome", "cpf", "grupo_sanguineo", "unidade", "data_hora_entrada", "motivo"],
       rotulos: { data_hora_entrada: "entrada", cpf: "CPF" },
     }),
     cartaoDeConsulta({
       titulo: "Residentes sem supervisor doutor (vw_residentes_sem_supervisor)",
       ajuda: "Plantões cujo preceptor responsável não tem titulação de doutor.",
-      caminho: "/etapa2/views/residentes-sem-supervisor",
+      caminho: "/residentes/sem-supervisor-doutor",
       colunas: ["residente", "ano_residencia", "unidade", "dia_semana", "turno", "preceptor", "titulacao", "motivo"],
     }),
     cartaoDeConsulta({
       titulo: "Estatísticas mensais (vw_estatisticas_atendimentos_mensal)",
-      ajuda: "Agrupado por mês e unidade. Atendimento sem unidade fica de fora, caso dos que " +
-             "vieram pelas rotas em SQL puro da Etapa 1.",
-      caminho: "/etapa2/views/estatisticas-mensais",
+      ajuda: "Agrupado por mês e unidade. Registros antigos sem unidade ficam de fora.",
+      caminho: "/atendimentos/estatisticas-mensais",
       colunas: ["mes", "unidade", "total_atendimentos", "media_duracao_minutos",
                 "menor_duracao", "maior_duracao", "procedimentos_mais_comuns"],
       rotulos: { media_duracao_minutos: "duração média (min)" },
@@ -186,7 +183,7 @@ function montarAbaProcedures() {
 
     try {
       const resposta = await chamarApi("POST",
-        "/etapa2/procedures/registrar-atendimento-completo",
+        "/atendimentos/completo",
         { ...dados, procedimentos });
       toast(resposta.mensagem, "ok");
       areaResultado.innerHTML = "";
@@ -233,7 +230,7 @@ function montarAbaProcedures() {
     escalasApos.innerHTML = "";
     try {
       const [escalas, residentes, unidades] = await Promise.all([
-        chamarApi("GET", "/orm/escalas/"),
+        chamarApi("GET", "/escalas/"),
         listaCacheada("residentes"),
         listaCacheada("unidades"),
       ]);
@@ -256,7 +253,7 @@ function montarAbaProcedures() {
   formReajuste.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     try {
-      const resposta = await chamarApi("POST", "/etapa2/procedures/reajustar-escala",
+      const resposta = await chamarApi("POST", "/escalas/reajustar",
         lerFormulario(formReajuste, camposReajuste));
       toast(resposta.mensagem, resposta.escalas_movidas > 0 ? "ok" : "erro");
       await recarregarEscalas();
@@ -327,7 +324,7 @@ function montarAbaAuditoria() {
     area.innerHTML = "";
     area.append(el("p", { class: "vazio" }, "Carregando..."));
     try {
-      const linhas = await chamarApi("GET", "/etapa2/auditoria" + montarQuery(filtros));
+      const linhas = await chamarApi("GET", "/auditoria/atendimentos" + montarQuery(filtros));
       const enfeitadas = linhas.map(l => ({
         ...l,
         alteracao: diferencas(l.dados_antigos, l.dados_novos),
@@ -366,14 +363,14 @@ function montarAbaConsultasOrm() {
     cartaoDeConsulta({
       titulo: "Tempo médio de espera por unidade (sp_calcular_tempo_medio_espera)",
       ajuda: "Intervalo entre a chegada do paciente e o início do primeiro procedimento.",
-      caminho: "/etapa2/procedures/tempo-medio-espera",
+      caminho: "/atendimentos/tempo-medio-espera",
       colunas: ["nome_unidade", "atendimentos_considerados", "espera_media_minutos"],
       rotulos: { nome_unidade: "unidade", espera_media_minutos: "espera média (min)" },
     }),
     cartaoDeConsulta({
       titulo: "Preceptores de pacientes flamenguistas",
       ajuda: "Preceptores que supervisionaram residentes no atendimento a pacientes com is_flamengo verdadeiro.",
-      caminho: "/etapa2/consultas/preceptores-flamenguistas",
+      caminho: "/preceptores/supervisionados-flamenguistas",
       colunas: ["preceptor", "titulacao", "especialidade",
                 "atendimentos_com_flamenguista", "residentes_supervisionados"],
     }),
@@ -381,7 +378,7 @@ function montarAbaConsultasOrm() {
       titulo: "Percentual de procedimentos de alto risco por residente",
       ajuda: "A contagem é por registro de procedimento realizado e ignora a coluna quantidade. " +
              "Residente sem procedimento aparece com 0%.",
-      caminho: "/etapa2/consultas/percentual-alto-risco",
+      caminho: "/residentes/percentual-alto-risco",
       colunas: ["residente", "ano_residencia", "total_procedimentos",
                 "procedimentos_alto_risco", "percentual_alto_risco"],
       rotulos: { percentual_alto_risco: "percentual (%)" },
@@ -389,7 +386,7 @@ function montarAbaConsultasOrm() {
     cartaoDeConsulta({
       titulo: "Último atendimento de cada paciente",
       ajuda: "Função de janela para achar o mais recente, com os relacionamentos carregados de uma vez.",
-      caminho: "/etapa2/consultas/ultimo-atendimento-por-paciente",
+      caminho: "/pacientes/ultimo-atendimento",
       colunas: ["paciente", "data_hora", "unidade", "residente", "preceptor", "procedimentos"],
       transformar: (itens) => itens.map(i => ({
         ...i,
@@ -422,7 +419,7 @@ function montarAbaConsultasOrm() {
     areaCarregamento.innerHTML = "";
     areaCarregamento.append(el("p", { class: "vazio" }, "Medindo..."));
     try {
-      const r = await chamarApi("GET", "/etapa2/consultas/lazy-vs-eager");
+      const r = await chamarApi("GET", "/consultas/lazy-vs-eager");
       areaCarregamento.innerHTML = "";
       areaCarregamento.append(tabelaSimples([r],
         ["atendimentos", "consultas_lazy", "consultas_eager", "resultados_iguais"],
@@ -448,31 +445,31 @@ function montarAbaConsultasOrm() {
     cartaoDeConsulta({
       titulo: "1. Ranking de residentes por atendimentos",
       ajuda: "Junção externa: residente sem atendimento aparece com total zero.",
-      caminho: "/orm/analiticas/ranking-residentes",
+      caminho: "/analiticas/ranking-residentes",
       colunas: ["nome", "ano_residencia", "total_atendimentos"],
     }),
     cartaoDeConsulta({
       titulo: "2. Preceptores com mais de 5 atendimentos em julho de 2026",
       ajuda: "WHERE filtra o mês antes de agrupar; HAVING filtra a contagem depois.",
-      caminho: "/orm/analiticas/preceptores-por-mes?mes=2026-07-01&minimo=5",
+      caminho: "/analiticas/preceptores-por-mes?mes=2026-07-01&minimo=5",
       colunas: ["nome", "titulacao", "total_supervisionados"],
     }),
     cartaoDeConsulta({
       titulo: "3. Plantões por residente em cada unidade (grade semanal)",
       ajuda: "A escala guarda dia da semana e turno, sem data. Aqui a contagem é das posições da grade.",
-      caminho: "/orm/analiticas/plantoes-por-unidade",
+      caminho: "/analiticas/plantoes-por-unidade",
       colunas: ["unidade", "residente", "plantoes"],
     }),
     cartaoDeConsulta({
       titulo: "3b. Plantões projetados no mês corrente",
       ajuda: "Mesma grade, multiplicada pelas ocorrências de cada dia da semana no mês.",
-      caminho: "/orm/analiticas/plantoes-por-unidade?projetar_no_mes=true",
+      caminho: "/analiticas/plantoes-por-unidade?projetar_no_mes=true",
       colunas: ["unidade", "residente", "plantoes"],
     }),
     cartaoDeConsulta({
       titulo: "4. Pacientes que nunca fizeram procedimento de risco ALTO",
       ajuda: "Feita com NOT EXISTS. Com NOT IN, um NULL na subconsulta zeraria o resultado sem dar erro.",
-      caminho: "/orm/analiticas/pacientes-sem-alto-risco",
+      caminho: "/analiticas/pacientes-sem-alto-risco",
       colunas: ["nome", "grupo_sanguineo", "numero_convenio"],
     }),
   ];
@@ -504,7 +501,7 @@ function montarAbaConcorrencia() {
     area.append(el("p", { class: "vazio" },
       "Executando. Os cenários esperam por bloqueio, então isso leva alguns segundos."));
     try {
-      const r = await chamarApi("POST", "/etapa2/concorrencia/simular");
+      const r = await chamarApi("POST", "/concorrencia/simular");
       area.innerHTML = "";
       for (const cenario of r.cenarios) {
         const log = tabelaSimples(cenario.log, ["instante", "ator", "mensagem"]);
@@ -542,12 +539,10 @@ function montarAbaConcorrencia() {
 /* ---------- registro das abas ---------- */
 
 function registrarRecursosEtapa2(RECURSOS) {
-  /* Internações usam a máquina de CRUD genérica do app.js. O caminho é fixo em
-     /orm porque a entidade nasceu na Etapa 2 e não tem versão em SQL puro. */
+  /* Internações usam a máquina de CRUD genérica do app.js. */
   RECURSOS["internacoes"] = {
     titulo: "Internações",
-    caminho: "/orm/internacoes/",
-    semModo: true,
+    caminho: "/internacoes/",
     chave: ["id_internacao"],
     podeEditar: true,
     podeExcluir: true,
@@ -589,7 +584,7 @@ function registrarRecursosEtapa2(RECURSOS) {
         return [el("button", { class: "botao salvar", onclick: async () => {
           if (!confirm(`Registrar alta da internação ${item.id_internacao} agora?`)) return;
           try {
-            await chamarApi("POST", `/orm/internacoes/${item.id_internacao}/alta`, {});
+            await chamarApi("POST", `/internacoes/${item.id_internacao}/alta`, {});
             toast("Alta registrada. O paciente sai da view de internados.", "ok");
             ativarAba("internacoes");
           } catch (e) { toast(e.message, "erro"); }
